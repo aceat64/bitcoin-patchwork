@@ -7,8 +7,12 @@
 #include <winsock2.h>
 #else
 #define WSAGetLastError() errno
+#define WSAEWOULDBLOCK EWOULDBLOCK
+#define WSAEMSGSIZE EMSGSIZE
+#define WSAEINTR EINTR
+#define WSAEINPROGRESS EINPROGRESS
+#define WSAEADDRINUSE EADDRINUSE
 #endif
-
 
 void ThreadMessageHandler2(void* parg);
 void ThreadSocketHandler2(void* parg);
@@ -938,7 +942,12 @@ void ThreadMessageHandler(void* parg)
 void ThreadMessageHandler2(void* parg)
 {
     printf("ThreadMessageHandler started\n");
+#ifdef __WXMSW__
     SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_BELOW_NORMAL);
+#else
+// the priority value could be something other than PRIO_MIN?
+	setpriority(PRIO_PROCESS, getpid(), PRIO_MIN);
+#endif
     loop
     {
         // Poll the connected nodes for messages
@@ -981,6 +990,7 @@ bool StartNode(string& strError)
 {
     strError = "";
 
+#ifdef __WXMSW__
     // Sockets startup
     WSADATA wsadata;
     int ret = WSAStartup(MAKEWORD(2,2), &wsadata);
@@ -990,6 +1000,7 @@ bool StartNode(string& strError)
         printf("%s\n", strError.c_str());
         return false;
     }
+#endif
 
     // Get local host ip
     char pszHostName[255];
@@ -1042,7 +1053,7 @@ bool StartNode(string& strError)
     // IP address, and port for the socket that is being bound
     int nRetryLimit = 15;
     struct sockaddr_in sockaddr = addrLocalHost.GetSockAddr();
-    if (bind(hListenSocket, (struct sockaddr*)&sockaddr, sizeof(sockaddr)) == SOCKET_ERROR)
+    if (::bind(hListenSocket, (struct sockaddr*)&sockaddr, sizeof(sockaddr)) == SOCKET_ERROR)
     {
         int nErr = WSAGetLastError();
         if (nErr == WSAEADDRINUSE)
@@ -1116,7 +1127,9 @@ bool StopNode()
     Sleep(50);
 
     // Sockets shutdown
+#ifdef __WXMSW_
     WSACleanup();
+#endif
     return true;
 }
 

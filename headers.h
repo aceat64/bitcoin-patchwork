@@ -23,6 +23,9 @@
 #include <wx/snglinst.h>
 #include <wx/taskbar.h>
 #include <wx/stdpaths.h>
+#include <wx/utils.h>
+#include <wx/taskbar.h>
+#include <wx/stdpaths.h>
 #include <openssl/ecdsa.h>
 #include <openssl/evp.h>
 #include <openssl/rand.h>
@@ -54,6 +57,9 @@
 #include <boost/array.hpp>
 #include <boost/filesystem.hpp>
 #include <boost/thread/thread.hpp>
+#include <boost/algorithm/string.hpp>
+#include <boost/filesystem.hpp>
+#include <boost/thread/thread.hpp>
 
 #ifdef __WXMSW__
 #	include <windows.h>
@@ -64,6 +70,20 @@
 #	include <io.h>
 #	include <process.h>
 #else
+#	include <sys/time.h>
+#	include <sys/resource.h>
+#	include <sys/socket.h>
+#	include <arpa/inet.h>
+#	include <netdb.h>
+#	include <unistd.h>
+#	include <errno.h>
+#	define _UI64_MAX UINT64_MAX
+#	define _I64_MAX INT64_MAX
+#	define _vsnprintf(a,b,c,d) vsnprintf(a,b,c,d)
+#	define closesocket(s) close(s)
+#	define INVALID_SOCKET (SOCKET)(~0)
+#	define SOCKET_ERROR -1
+	typedef u_int SOCKET;
 #	include <sys/time.h>
 #	include <sys/socket.h>
 #	include <arpa/inet.h>

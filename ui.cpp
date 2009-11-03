@@ -287,7 +287,7 @@ CMainFrame::CMainFrame(wxWindow* parent) : CMainFrameBase(parent)
     m_choiceFilter->SetSelection(0);
     m_staticTextBalance->SetLabel(FormatMoney(GetBalance()) + "  ");
     m_listCtrl->SetFocus();
-    SetIcon(wxICON(bitcoin));
+    // SetIcon(wxICON(bitcoin));
     ptaskbaricon = new CMyTaskBarIcon();
 
     // Init toolbar with transparency masked bitmaps
@@ -381,7 +381,7 @@ void CMainFrame::OnClose(wxCloseEvent& event)
     else
     {
         Destroy();
-        _beginthread(Shutdown, 0, NULL);
+        thread(Shutdown);
     }
 }
 
@@ -905,7 +905,7 @@ void CMainFrame::OnPaintListCtrl(wxPaintEvent& event)
 
     // mapWallet was locked, try again later
     if (!vWalletUpdated.empty() || !fRefreshed)
-        _beginthread(DelayedRepaint, 0, NULL);
+        thread(DelayedRepaint);
 
     m_listCtrl->OnPaint(event);
 }
@@ -1740,7 +1740,7 @@ CSendingDialog::CSendingDialog(wxWindow* parent, const CAddress& addrIn, int64 n
     SetTitle(strprintf("Sending %s to %s...", FormatMoney(nPrice).c_str(), wtx.mapValue["to"].c_str()));
     m_textCtrlStatus->SetValue("");
 
-    _beginthread(SendingDialogStartTransfer, 0, this);
+    thread(SendingDialogStartTransfer);
 }
 
 CSendingDialog::~CSendingDialog()
@@ -2757,7 +2757,7 @@ CViewProductDialog::CViewProductDialog(wxWindow* parent, const CProduct& product
     this->Layout();
 
     // Request details from seller
-    _beginthread(ThreadRequestProductDetails, 0, new pair<CProduct, wxEvtHandler*>(product, GetEventHandler()));
+    thread(ThreadRequestProductDetails, 0, new pair<CProduct, wxEvtHandler*>(product, GetEventHandler()));
 }
 
 CViewProductDialog::~CViewProductDialog()
@@ -3184,7 +3184,7 @@ void CMyTaskBarIcon::Show(bool fShow)
         if (strncmp(pszPrevTip, strTooltip.c_str(), sizeof(pszPrevTip)-1) != 0)
         {
             strlcpy(pszPrevTip, strTooltip.c_str(), sizeof(pszPrevTip));
-            SetIcon(wxICON(bitcoin), strTooltip);
+            // SetIcon(wxICON(bitcoin), strTooltip);
         }
     }
     else
@@ -3318,7 +3318,7 @@ map<string, string> ParseParameters(int argc, char* argv[])
             pszValue = strchr(psz, '=');
             *pszValue++ = '\0';
         }
-        strlwr(psz);
+        to_lower(psz);
         if (psz[0] == '-')
             psz[0] = '/';
         mapArgs[psz] = pszValue;
@@ -3340,7 +3340,7 @@ bool CMyApp::OnInit2()
 
     //// debug print
     printf("\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n");
-    printf("Bitcoin version %d, Windows version %08x\n", VERSION, GetVersion());
+    printf("Bitcoin version %d, OS version %s\n", VERSION, wxGetOsDescription().mb_str());
 
     //
     // Limit to single instance per user
@@ -3357,6 +3357,8 @@ bool CMyApp::OnInit2()
         unsigned int nStart = GetTime();
         loop
         {
+			// TODO: find out how to do this in Linux, or replace with wxWidgets commands
+#ifdef __WXMSW__
             // Show the previous instance and exit
             HWND hwndPrev = FindWindow("wxWindowClassNR", "Bitcoin");
             if (hwndPrev)
@@ -3366,6 +3368,7 @@ bool CMyApp::OnInit2()
                 SetForegroundWindow(hwndPrev);
                 return false;
             }
+#endif
 
             if (GetTime() > nStart + 60)
                 return false;
@@ -3406,7 +3409,12 @@ bool CMyApp::OnInit2()
         CTxDB txdb("r");
         txdb.LoadBlockIndex();
         PrintBlockTree();
+#ifdef __WXMSW__
         ExitProcess(0);
+#else
+		// wxWidgets alternative for this?
+		exit(0);
+#endif
     }
 
     //
@@ -3516,7 +3524,7 @@ bool CMyApp::OnInit2()
     //
     // Tests
     //
-    if (argc >= 2 && stricmp(argv[1], "/send") == 0)
+    if (argc >= 2 && iequals(argv[1], "/send"))
     {
         int64 nValue = 1;
         if (argc >= 3)
@@ -3541,7 +3549,7 @@ bool CMyApp::OnInit2()
     if (mapArgs.count("/randsendtest"))
     {
         if (!mapArgs["/randsendtest"].empty())
-            _beginthread(ThreadRandSendTest, 0, new string(mapArgs["/randsendtest"]));
+            thread(ThreadRandSendTest, 0, new string(mapArgs["/randsendtest"]));
         else
             fRandSendTest = true;
         fDebug = true;
@@ -3624,7 +3632,7 @@ void MainFrameRepaint()
 }
 
 
-
+#ifdef __WXMSW__
 typedef WINSHELLAPI BOOL WINAPI (*PSHGETSPECIALFOLDERPATHA)(HWND hwndOwner, LPSTR lpszPath, int nFolder, BOOL fCreate);
 
 string MyGetSpecialFolderPath(int nFolder, bool fCreate)
@@ -3716,7 +3724,7 @@ void SetStartOnSystemStartup(bool fAutoStart)
         CoUninitialize();
     }
 }
-
+#endif
 
 
 

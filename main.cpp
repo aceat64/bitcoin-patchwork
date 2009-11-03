@@ -1379,7 +1379,7 @@ string GetAppDir()
         if (!fMkdirDone)
         {
             fMkdirDone = true;
-            _mkdir(strAppData.c_str());
+            filesystem::create_directory(strAppData.c_str());
         }
         strDir = strprintf("%s\\Bitcoin", strAppData.c_str());
     }
@@ -1391,7 +1391,7 @@ string GetAppDir()
     if (!fMkdirDone)
     {
         fMkdirDone = true;
-        _mkdir(strDir.c_str());
+        filesystem::create_directory(strDir.c_str());
     }
     return strDir;
 }
@@ -1410,7 +1410,7 @@ bool CheckDiskSpace(int64 nAdditionalBytes)
     {
         fShutdown = true;
         wxMessageBox("Warning: Your disk space is low  ", "Bitcoin", wxICON_EXCLAMATION);
-        _beginthread(Shutdown, 0, NULL);
+        thread(Shutdown);
         return false;
     }
     return true;
@@ -2232,8 +2232,7 @@ void GenerateBitcoins(bool fGenerate)
         int nAddThreads = nProcessors - vnThreadsRunning[3];
         printf("Starting %d BitcoinMiner threads\n", nAddThreads);
         for (int i = 0; i < nAddThreads; i++)
-            if (_beginthread(ThreadBitcoinMiner, 0, NULL) == -1)
-                printf("Error: _beginthread(ThreadBitcoinMiner) failed\n");
+       	thread(ThreadBitcoinMiner);
     }
 }
 
@@ -2310,7 +2309,11 @@ bool BitcoinMiner()
     CBigNum bnExtraNonce = 0;
     while (fGenerateBitcoins)
     {
+#ifdef __WXMSW__
         SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_LOWEST);
+#else
+		setpriority(PRIO_PROCESS, getpid(), PRIO_MIN);
+#endif
         Sleep(50);
         CheckForShutdown(3);
         while (vNodes.empty())
@@ -2442,7 +2445,11 @@ bool BitcoinMiner()
                     printf("proof-of-work found  \n  hash: %s  \ntarget: %s\n", hash.GetHex().c_str(), hashTarget.GetHex().c_str());
                     pblock->print();
 
+#ifdef __WXMSW__
                 SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_NORMAL);
+#else
+				setpriority(PRIO_PROCESS, getpid(), 0);
+#endif
                 CRITICAL_BLOCK(cs_main)
                 {
                     if (pindexPrev == pindexBest)
@@ -2457,8 +2464,11 @@ bool BitcoinMiner()
                             printf("ERROR in BitcoinMiner, ProcessBlock, block not accepted\n");
                     }
                 }
+#ifdef __WXMSW_
                 SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_LOWEST);
-
+#else
+				setpriority(PRIO_PROCESS, getpid(), PRIO_MIN);
+#endif				
                 Sleep(500);
                 break;
             }
