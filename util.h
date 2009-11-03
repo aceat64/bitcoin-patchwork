@@ -2,7 +2,6 @@
 // Distributed under the MIT/X11 software license, see the accompanying
 // file license.txt or http://www.opensource.org/licenses/mit-license.php.
 
-
 #if defined(_MSC_VER) || defined(__BORLANDC__)
 typedef __int64  int64;
 typedef unsigned __int64  uint64;
@@ -350,13 +349,15 @@ inline void Sleep(unsigned int nMilliseconds)
 
 
 
-
-
+
 inline void heapchk()
 {
+#ifdef __WXMSW__
     if (_heapchk() != _HEAPOK)
         DebugBreak();
+#endif
 }
+
 
 // Randomize the stack to help protect against buffer overrun exploits
 #define IMPLEMENT_RANDOMIZE_STACK(ThreadFn)                         \

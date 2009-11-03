@@ -3,7 +3,12 @@
 // file license.txt or http://www.opensource.org/licenses/mit-license.php.
 
 #include "headers.h"
+#ifdef __WXMSW__
 #include <winsock2.h>
+#else
+#define WSAGetLastError() errno
+#endif
+
 
 void ThreadMessageHandler2(void* parg);
 void ThreadSocketHandler2(void* parg);
@@ -398,10 +403,15 @@ CNode* ConnectNode(CAddress addrConnect, int64 nTimeout)
         /// debug print
         printf("connected %s\n", addrConnect.ToStringLog().c_str());
 
-        // Set to nonblocking
-        u_long nOne = 1;
+        // Set to nonblocking      
+#ifdef __WXMSW__
+		u_long nOne = 1;
         if (ioctlsocket(hSocket, FIONBIO, &nOne) == SOCKET_ERROR)
             printf("ConnectSocket() : ioctlsocket nonblocking setting failed, error %d\n", WSAGetLastError());
+#else
+		if (fcntl(hSocket, F_SETFL, O_NONBLOCK) == SOCKET_ERROR)
+			printf("ConnectSocket() : fcntl nonblocking setting failed, error %d\n", errno);
+#endif
 
         // Add node
         CNode* pnode = new CNode(hSocket, addrConnect, false);
@@ -467,7 +477,7 @@ void ThreadSocketHandler(void* parg)
     loop
     {
         vnThreadsRunning[0]++;
-        CheckForShutdown(0);
+      	if (CheckForShutdown(0)) return;
         try
         {
             ThreadSocketHandler2(parg);
@@ -550,8 +560,8 @@ void ThreadSocketHandler2(void* parg)
         timeout.tv_sec  = 0;
         timeout.tv_usec = 50000; // frequency to poll pnode->vSend
 
-        struct fd_set fdsetRecv;
-        struct fd_set fdsetSend;
+        fd_set fdsetRecv;
+        fd_set fdsetSend;
         FD_ZERO(&fdsetRecv);
         FD_ZERO(&fdsetSend);
         SOCKET hSocketMax = 0;
@@ -572,7 +582,7 @@ void ThreadSocketHandler2(void* parg)
         vnThreadsRunning[0]--;
         int nSelect = select(hSocketMax + 1, &fdsetRecv, &fdsetSend, NULL, &timeout);
         vnThreadsRunning[0]++;
-        CheckForShutdown(0);
+        if (CheckForShutdown(0)) return;
         if (nSelect == SOCKET_ERROR)
         {
             int nErr = WSAGetLastError();
@@ -601,7 +611,7 @@ void ThreadSocketHandler2(void* parg)
         {
             struct sockaddr_in sockaddr;
             int len = sizeof(sockaddr);
-            SOCKET hSocket = accept(hListenSocket, (struct sockaddr*)&sockaddr, &len);
+            SOCKET hSocket = accept(hListenSocket, (struct sockaddr*)&sockaddr, (socklen_t*)&len);
             CAddress addr(sockaddr);
             if (hSocket == INVALID_SOCKET)
             {
@@ -627,7 +637,7 @@ void ThreadSocketHandler2(void* parg)
             vNodesCopy = vNodes;
         foreach(CNode* pnode, vNodesCopy)
         {
-            CheckForShutdown(0);
+            if (CheckForShutdown(0)) return;
             SOCKET hSocket = pnode->hSocket;
 
             //
@@ -718,7 +728,7 @@ void ThreadOpenConnections(void* parg)
     loop
     {
         vnThreadsRunning[1]++;
-        CheckForShutdown(1);
+        if (CheckForShutdown(1)) return;
         try
         {
             ThreadOpenConnections2(parg);
@@ -757,11 +767,11 @@ void ThreadOpenConnections2(void* parg)
         Sleep(500);
         while (vNodes.size() >= nMaxConnections || vNodes.size() >= mapAddresses.size())
         {
-            CheckForShutdown(1);
+            if (CheckForShutdown(1)) return;
             Sleep(2000);
         }
         vnThreadsRunning[1]++;
-        CheckForShutdown(1);
+        if (CheckForShutdown(1)) return;
 
 
         //
@@ -858,14 +868,16 @@ bool OpenNetworkConnection(const CAddress& addrConnect)
     //
     // Initiate outbound network connection
     //
-    CheckForShutdown(1);
+	
+	// TODO: might be a problem here: CheckForShutdown doesn't end the current thread 
+    if (CheckForShutdown(1)) return true;
     if (addrConnect.ip == addrLocalHost.ip || !addrConnect.IsIPv4() || FindNode(addrConnect.ip))
         return false;
 
     vnThreadsRunning[1]--;
     CNode* pnode = ConnectNode(addrConnect);
     vnThreadsRunning[1]++;
-    CheckForShutdown(1);
+    if (CheckForShutdown(1)) return true;
     if (!pnode)
         return false;
     pnode->fNetworkNode = true;
@@ -906,7 +918,7 @@ void ThreadMessageHandler(void* parg)
     loop
     {
         vnThreadsRunning[2]++;
-        CheckForShutdown(2);
+        if (CheckForShutdown(2)) return;
         try
         {
             ThreadMessageHandler2(parg);
@@ -952,7 +964,7 @@ void ThreadMessageHandler2(void* parg)
         vnThreadsRunning[2]--;
         Sleep(100);
         vnThreadsRunning[2]++;
-        CheckForShutdown(2);
+        if (CheckForShutdown(2)) return;
     }
 }
 
@@ -1009,6 +1021,7 @@ bool StartNode(string& strError)
     }
 
     // Set to nonblocking, incoming connections will also inherit this
+#ifdef __WXMSW__
     u_long nOne = 1;
     if (ioctlsocket(hListenSocket, FIONBIO, &nOne) == SOCKET_ERROR)
     {
@@ -1016,6 +1029,14 @@ bool StartNode(string& strError)
         printf("%s\n", strError.c_str());
         return false;
     }
+#else
+	if (fcntl(hListenSocket, F_SETFL, O_NONBLOCK) == SOCKET_ERROR)
+	{
+        strError = strprintf("Error: Couldn't set properties on socket for incoming connections (ioctlsocket returned error %d)", errno);
+        printf("%s\n", strError.c_str());
+        return false;
+    }
+#endif
 
     // The sockaddr_in structure specifies the address family,
     // IP address, and port for the socket that is being bound
@@ -1060,32 +1081,16 @@ bool StartNode(string& strError)
     }
 
     // Get addresses from IRC and advertise ours
-    if (_beginthread(ThreadIRCSeed, 0, NULL) == -1)
-        printf("Error: _beginthread(ThreadIRCSeed) failed\n");
+    thread(ThreadIRCSeed);
 
     //
     // Start threads
     //
-    if (_beginthread(ThreadSocketHandler, 0, NULL) == -1)
-    {
-        strError = "Error: _beginthread(ThreadSocketHandler) failed";
-        printf("%s\n", strError.c_str());
-        return false;
-    }
+    thread(ThreadSocketHandler);
 
-    if (_beginthread(ThreadOpenConnections, 0, NULL) == -1)
-    {
-        strError = "Error: _beginthread(ThreadOpenConnections) failed";
-        printf("%s\n", strError.c_str());
-        return false;
-    }
+    thread(ThreadOpenConnections);
 
-    if (_beginthread(ThreadMessageHandler, 0, NULL) == -1)
-    {
-        strError = "Error: _beginthread(ThreadMessageHandler) failed";
-        printf("%s\n", strError.c_str());
-        return false;
-    }
+    thread(ThreadMessageHandler);
 
     return true;
 }
@@ -1115,7 +1120,7 @@ bool StopNode()
     return true;
 }
 
-void CheckForShutdown(int n)
+bool CheckForShutdown(int n)
 {
     if (fShutdown)
     {
@@ -1129,6 +1134,7 @@ void CheckForShutdown(int n)
             closesocket(hListenSocket);
         }
         printf("Thread %d exiting\n", n);
-        _endthread();
+        return true;
     }
+	return false;
 }

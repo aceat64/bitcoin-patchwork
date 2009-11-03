@@ -2,12 +2,6 @@
 // Distributed under the MIT/X11 software license, see the accompanying
 // file license.txt or http://www.opensource.org/licenses/mit-license.php.
 
-#ifndef __WXMSW__
-#define closesocket(s) close(s)
-#define INVALID_SOCKET (SOCKET)(~0)
-typedef u_int SOCKET;
-#endif
-
 class CMessageHeader;
 class CAddress;
 class CInv;
@@ -35,7 +29,7 @@ void AbandonRequests(void (*fn)(void*, CDataStream&), void* param1);
 bool AnySubscribed(unsigned int nChannel);
 bool StartNode(string& strError=REF(string()));
 bool StopNode();
-void CheckForShutdown(int n);
+bool CheckForShutdown(int n);
 
 
 

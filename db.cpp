@@ -63,7 +63,7 @@ CDB::CDB(const char* pszFile, const char* pszMode, bool fTxn) : pdb(NULL)
                 return;
             string strAppDir = GetAppDir();
             string strLogDir = strAppDir + "\\database";
-            _mkdir(strLogDir.c_str());
+            filesystem::create_directory(strLogDir.c_str());
             printf("dbenv.open strAppDir=%s\n", strAppDir.c_str());
 
             dbenv.set_lg_dir(strLogDir.c_str());
@@ -639,7 +639,7 @@ bool LoadWallet(bool& fFirstRunRet)
         CWalletDB().WriteDefaultKey(keyUser.GetPubKey());
     }
 
-    _beginthread(ThreadFlushWalletDB, 0, NULL);
+   	thread(ThreadFlushWalletDB);
     return true;
 }
 

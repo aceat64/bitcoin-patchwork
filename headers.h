@@ -17,10 +17,12 @@
 #endif
 #define _WIN32_IE 0x0400
 #define WIN32_LEAN_AND_MEAN 1
+#define __STDC_LIMIT_MACROS // to enable UINT64_MAX from stdint.h
 #include <wx/wx.h>
 #include <wx/clipbrd.h>
 #include <wx/snglinst.h>
 #include <wx/taskbar.h>
+#include <wx/stdpaths.h>
 #include <openssl/ecdsa.h>
 #include <openssl/evp.h>
 #include <openssl/rand.h>
@@ -50,20 +52,30 @@
 #include <boost/tuple/tuple_comparison.hpp>
 #include <boost/tuple/tuple_io.hpp>
 #include <boost/array.hpp>
+#include <boost/filesystem.hpp>
+#include <boost/thread/thread.hpp>
 
 #ifdef __WXMSW__
-#include <windows.h>
-#include <winsock2.h>
-#include <mswsock.h>
-#include <shlobj.h>
-#include <shlwapi.h>
-#include <io.h>
-#include <process.h>
+#	include <windows.h>
+#	include <winsock2.h>
+#	include <mswsock.h>
+#	include <shlobj.h>
+#	include <shlwapi.h>
+#	include <io.h>
+#	include <process.h>
 #else
-#include <sys/time.h>
-#include <sys/socket.h>
-#include <arpa/inet.h>
-#include <unistd.h>
+#	include <sys/time.h>
+#	include <sys/socket.h>
+#	include <arpa/inet.h>
+#	include <netdb.h>
+#	include <unistd.h>
+#	include <errno.h>
+#	define _UI64_MAX UINT64_MAX
+#	define _vsnprintf(a,b,c,d) vsnprintf(a,b,c,d)
+#	define closesocket(s) close(s)
+#	define INVALID_SOCKET (SOCKET)(~0)
+#	define SOCKET_ERROR -1
+	typedef u_int SOCKET;
 #endif
 
 #pragma hdrstop

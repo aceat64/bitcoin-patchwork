@@ -34,9 +34,11 @@ public:
             ppmutexOpenSSL[i] = new wxMutex();
         CRYPTO_set_locking_callback(locking_callback);
 
+#ifdef __WXMSW__
         // Seed random number generator with screen scrape and other hardware sources
         RAND_screen();
-
+#endif
+		
         // Seed random number generator with performance counter
         RandAddSeed();
     }
@@ -68,6 +70,8 @@ void RandAddSeed()
 
 void RandAddSeedPerfmon()
 {
+	// No Linux implementation needed - OpenSSL uses /dev/urandom on Linux.
+#ifdef __WXMSW__
     // This can take up to 2 seconds, so only do it every 10 minutes
     static int64 nLastPerfmon;
     if (GetTime() < nLastPerfmon + 10 * 60)
@@ -95,6 +99,7 @@ void RandAddSeedPerfmon()
         strftime(pszTime, sizeof(pszTime), "%x %H:%M:%S", ptmTime);
         printf("%s RandAddSeed() %d bytes\n", pszTime, nSize);
     }
+#endif
 }
 
 
@@ -310,9 +315,7 @@ vector<unsigned char> ParseHex(const std::string& str)
 
 void FormatException(char* pszMessage, std::exception* pex, const char* pszThread)
 {
-    char pszModule[MAX_PATH];
-    pszModule[0] = '\0';
-    GetModuleFileName(NULL, pszModule, sizeof(pszModule));
+    const char* pszModule = wxStandardPaths::Get().GetExecutablePath().mb_str();
     if (pex)
         snprintf(pszMessage, 1000,
             "EXCEPTION: %s       \n%s       \n%s in %s       \n", typeid(*pex).name(), pex->what(), pszModule, pszThread);
