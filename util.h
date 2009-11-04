@@ -53,6 +53,14 @@ inline T& REF(const T& val)
     return (T&)val;
 }
 
+#ifndef __WXMSW_
+#define WSAGetLastError() errno
+#define WSAEWOULDBLOCK EWOULDBLOCK
+#define WSAEMSGSIZE EMSGSIZE
+#define WSAEINTR EINTR
+#define WSAEINPROGRESS EINPROGRESS
+#define WSAEADDRINUSE EADDRINUSE
+#endif
 
 
 

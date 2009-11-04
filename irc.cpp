@@ -159,7 +159,7 @@ bool Wait(int nSeconds)
 
 void ThreadIRCSeed(void* parg)
 {
-    SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_NORMAL);
+    //SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_NORMAL); // redundant
     int nErrorWait = 10;
     int nRetryWait = 10;
 

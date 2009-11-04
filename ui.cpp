@@ -261,7 +261,7 @@ void AddPendingReplyEvent3(void* pevthandler, CDataStream& vRecv)
 CDataStream GetStreamFromEvent(const wxCommandEvent& event)
 {
     wxString strData = event.GetString();
-    return CDataStream(strData.begin(), strData.begin() + event.GetInt(), SER_NETWORK);
+    return CDataStream(strData.c_str(), strData.c_str() + event.GetInt(), SER_NETWORK);
 }
 
 
@@ -287,7 +287,7 @@ CMainFrame::CMainFrame(wxWindow* parent) : CMainFrameBase(parent)
     m_choiceFilter->SetSelection(0);
     m_staticTextBalance->SetLabel(FormatMoney(GetBalance()) + "  ");
     m_listCtrl->SetFocus();
-    // SetIcon(wxICON(bitcoin));
+    SetIcon(wxICON(bitcoin));
     ptaskbaricon = new CMyTaskBarIcon();
 
     // Init toolbar with transparency masked bitmaps
@@ -907,7 +907,9 @@ void CMainFrame::OnPaintListCtrl(wxPaintEvent& event)
     if (!vWalletUpdated.empty() || !fRefreshed)
         thread(DelayedRepaint);
 
+#ifdef __WXMSW__
     m_listCtrl->OnPaint(event);
+#endif
 }
 
 void CrossThreadCall(wxCommandEvent& event)
@@ -2757,7 +2759,7 @@ CViewProductDialog::CViewProductDialog(wxWindow* parent, const CProduct& product
     this->Layout();
 
     // Request details from seller
-    thread(ThreadRequestProductDetails, 0, new pair<CProduct, wxEvtHandler*>(product, GetEventHandler()));
+    thread(bind(ThreadRequestProductDetails, new pair<CProduct, wxEvtHandler*>(product, GetEventHandler())));
 }
 
 CViewProductDialog::~CViewProductDialog()
@@ -3184,7 +3186,7 @@ void CMyTaskBarIcon::Show(bool fShow)
         if (strncmp(pszPrevTip, strTooltip.c_str(), sizeof(pszPrevTip)-1) != 0)
         {
             strlcpy(pszPrevTip, strTooltip.c_str(), sizeof(pszPrevTip));
-            // SetIcon(wxICON(bitcoin), strTooltip);
+            SetIcon(wxICON(bitcoin), strTooltip);
         }
     }
     else
@@ -3549,7 +3551,7 @@ bool CMyApp::OnInit2()
     if (mapArgs.count("/randsendtest"))
     {
         if (!mapArgs["/randsendtest"].empty())
-            thread(ThreadRandSendTest, 0, new string(mapArgs["/randsendtest"]));
+            thread(bind(ThreadRandSendTest, new string(mapArgs["/randsendtest"])));
         else
             fRandSendTest = true;
         fDebug = true;

@@ -1978,3 +1978,20 @@ CGetTextFromUserDialogBase::~CGetTextFromUserDialogBase()
 	m_buttonOK->Disconnect( wxEVT_COMMAND_BUTTON_CLICKED, wxCommandEventHandler( CGetTextFromUserDialogBase::OnButtonOK ), NULL, this );
 	m_buttonCancel->Disconnect( wxEVT_COMMAND_BUTTON_CLICKED, wxCommandEventHandler( CGetTextFromUserDialogBase::OnButtonCancel ), NULL, this );
 }
+
+CIncludeXPM::CIncludeXPM( wxWindow* parent, wxWindowID id, const wxPoint& pos, const wxSize& size, long style ) : wxPanel( parent, id, pos, size, style )
+{
+	wxBoxSizer* bSizer104;
+	bSizer104 = new wxBoxSizer( wxVERTICAL );
+	
+	m_staticText81 = new wxStaticText( this, wxID_ANY, wxT("This panel is only here to use the subclass field to include the file xpm.h"), wxDefaultPosition, wxDefaultSize, 0 );
+	m_staticText81->Wrap( -1 );
+	bSizer104->Add( m_staticText81, 0, wxALL, 5 );
+	
+	this->SetSizer( bSizer104 );
+	this->Layout();
+}
+
+CIncludeXPM::~CIncludeXPM()
+{
+}

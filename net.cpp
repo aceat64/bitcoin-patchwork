@@ -5,13 +5,6 @@
 #include "headers.h"
 #ifdef __WXMSW__
 #include <winsock2.h>
-#else
-#define WSAGetLastError() errno
-#define WSAEWOULDBLOCK EWOULDBLOCK
-#define WSAEMSGSIZE EMSGSIZE
-#define WSAEINTR EINTR
-#define WSAEINPROGRESS EINPROGRESS
-#define WSAEADDRINUSE EADDRINUSE
 #endif
 
 void ThreadMessageHandler2(void* parg);
@@ -1147,7 +1140,8 @@ bool CheckForShutdown(int n)
             closesocket(hListenSocket);
         }
         printf("Thread %d exiting\n", n);
+        pthread_exit(NULL);
         return true;
     }
-	return false;
+    return false;
 }

@@ -10,21 +10,26 @@ endif
 endif
 ifeq "$(BUILD)" "debug"
 D=d
-# note: gcc 3.x profile doesn't work
-#DEBUGFLAGS=-O0 -g -pg -D__WXDEBUG__
 DEBUGFLAGS=-g -D__WXDEBUG__
 endif
 
 
 
-INCLUDEPATHS=-I"/boost" -I"/usr/local/BerkeleyDB.4.8/include" -I"/OpenSSL/include" -I"/wxWidgets/lib/vc_lib/mswd" -I"/wxWidgets/include"
-LIBPATHS=-L"/usr/local/BerkeleyDB.4.8/include" -L"/OpenSSL/out" -L"/wxWidgets/lib/gcc_lib"
+INCLUDEPATHS=-I"/usr/local/boost_1_37_0" \
+             -I"/usr/local/db-4.7.25.NC/build_unix" \
+             -I"/usr/local/ssl/include" \
+             -I"/usr/local/include/wx-2.8" \
+             -I"/usr/local/lib/wx/include/gtk2-ansi-debug-static-2.8"
+
+LIBPATHS=-L"/usr/local/db-4.7.25.NC/build_unix" \
+         -L"/usr/local/ssl/lib" \
+         -L"/usr/local/lib"
+
 LIBS= \
  -l db_cxx \
- -l eay32 \
- -l wxmsw28$(D)_richtext -l wxmsw28$(D)_html -l wxmsw28$(D)_core -l wxmsw28$(D)_adv -l wxbase28$(D) -l wxtiff$(D) -l wxjpeg$(D) -l wxpng$(D) -l wxzlib$(D) -l wxregex$(D) -l wxexpat$(D) \
- -l kernel32 -l user32 -l gdi32 -l comdlg32 -l winspool -l winmm -l shell32 -l comctl32 -l ole32 -l oleaut32 -l uuid -l rpcrt4 -l advapi32 -l ws2_32 -l shlwapi
-WXDEFS=`wx-config --cxxflags` `wx-config --libs`
+ -l crypto \
+ -l wx_gtk2$(D)-2.8
+WXDEFS=-D__WXGTK__ -DNOPCH
 CFLAGS=-O0 -w -Wno-invalid-offsetof -Wformat $(DEBUGFLAGS) $(WXDEFS) $(INCLUDEPATHS)
 HEADERS=headers.h util.h main.h serialize.h uint256.h key.h bignum.h script.h db.h base58.h
 
@@ -66,18 +71,18 @@ obj/sha.o: sha.cpp		    sha.h
 obj/irc.o:  irc.cpp		    $(HEADERS)
 	g++ -c $(CFLAGS) -o $@ $<
 
-obj/ui_res.o: ui.rc  rc/bitcoin.ico rc/check.ico rc/send16.bmp rc/send16mask.bmp rc/send16masknoshadow.bmp rc/send20.bmp rc/send20mask.bmp rc/addressbook16.bmp rc/addressbook16mask.bmp rc/addressbook20.bmp rc/addressbook20mask.bmp
-	windres $(WXDEFS) $(INCLUDEPATHS) -o $@ -i $<
 
 
 
-OBJS=obj/util.o obj/script.o obj/db.o obj/net.o obj/main.o obj/market.o	 \
-	obj/ui.o obj/uibase.o obj/sha.o obj/irc.o obj/ui_res.o
+OBJS=obj/util.o obj/script.o obj/db.o obj/net.o obj/main.o obj/market.o \
+	obj/ui.o obj/uibase.o obj/sha.o obj/irc.o 
 
 bitcoin.exe: headers.h.gch $(OBJS)
-	-kill /f bitcoin.exe
-	g++ $(CFLAGS) -mwindows -Wl,--subsystem,windows -o $@ $(LIBPATHS) $(OBJS) $(LIBS)
+	g++ $(CFLAGS) -o $@ $(LIBPATHS) $(OBJS) $(LIBS)
 
 clean:
 	-del /Q obj\*
 	-del /Q headers.h.gch
+
+
+

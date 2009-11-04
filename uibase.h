@@ -8,6 +8,9 @@
 #ifndef __uibase__
 #define __uibase__
 
+class wxPanel;
+
+#include "xpm.h"
 #include <wx/string.h>
 #include <wx/bitmap.h>
 #include <wx/image.h>
@@ -752,6 +755,22 @@ class CGetTextFromUserDialogBase : public wxDialog
 	public:
 		CGetTextFromUserDialogBase( wxWindow* parent, wxWindowID id = wxID_ANY, const wxString& title = wxEmptyString, const wxPoint& pos = wxDefaultPosition, const wxSize& size = wxSize( 403,138 ), long style = wxDEFAULT_DIALOG_STYLE );
 		~CGetTextFromUserDialogBase();
+	
+};
+
+///////////////////////////////////////////////////////////////////////////////
+/// Class CIncludeXPM
+///////////////////////////////////////////////////////////////////////////////
+class CIncludeXPM : public wxPanel
+{
+	private:
+	
+	protected:
+		wxStaticText* m_staticText81;
+	
+	public:
+		CIncludeXPM( wxWindow* parent, wxWindowID id = wxID_ANY, const wxPoint& pos = wxDefaultPosition, const wxSize& size = wxSize( 500,300 ), long style = wxTAB_TRAVERSAL );
+		~CIncludeXPM();
 	
 };
 
