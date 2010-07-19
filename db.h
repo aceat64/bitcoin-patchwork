@@ -393,6 +393,24 @@ public:
         return Write(make_pair(string("setting"), strKey), value);
     }
 
+    bool ReadMonitorReceived(const string& strAddress, string& strURL)
+    {
+        strURL = "";
+        return Read(make_pair(string("monitorreceived"), strAddress), strURL);
+    }
+
+    bool WriteMonitorReceived(const string& strAddress, const string& strURL)
+    {
+        nWalletDBUpdated++;
+        return Write(make_pair(string("monitorreceived"), strAddress), strURL);
+    }
+
+    bool EraseMonitorReceived(const string& strAddress)
+    {
+        nWalletDBUpdated++;
+        return Erase(make_pair(string("monitorreceived"), strAddress));
+    }
+
     bool LoadWallet();
 };
 

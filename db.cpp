@@ -526,6 +526,7 @@ bool CWalletDB::LoadWallet()
     //// todo: shouldn't we catch exceptions and try to recover and continue?
     CRITICAL_BLOCK(cs_mapKeys)
     CRITICAL_BLOCK(cs_mapWallet)
+    CRITICAL_BLOCK(cs_mapMonitorReceived)
     {
         // Get cursor
         Dbc* pcursor = GetCursor();
@@ -553,6 +554,12 @@ bool CWalletDB::LoadWallet()
                 string strAddress;
                 ssKey >> strAddress;
                 ssValue >> mapAddressBook[strAddress];
+            }
+            else if (strType == "monitorreceived")
+            {
+                string strAddress;
+                ssKey >> strAddress;
+                ssValue >> mapMonitorReceived[strAddress];
             }
             else if (strType == "tx")
             {

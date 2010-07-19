@@ -41,6 +41,9 @@ extern map<string, string> mapAddressBook;
 extern CCriticalSection cs_mapAddressBook;
 extern vector<unsigned char> vchDefaultKey;
 
+extern CCriticalSection cs_mapMonitorReceived;
+extern map<string, string> mapMonitorReceived;
+
 // Settings
 extern int fGenerateBitcoins;
 extern int64 nTransactionFee;
@@ -275,6 +278,7 @@ public:
 
     bool IsMine() const;
     int64 GetDebit() const;
+    string Address() const;
 };
 
 
@@ -358,6 +362,8 @@ public:
     {
         printf("%s\n", ToString().c_str());
     }
+
+    string Address() const;
 };
 
 
@@ -407,6 +413,8 @@ public:
     {
         return SerializeHash(*this);
     }
+
+    bool FromHash(const uint256& hash);
 
     bool IsFinal(int64 nBlockTime=0) const
     {
