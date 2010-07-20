@@ -478,35 +478,6 @@ Value monitorreceivedbyaddress(const Array& params, bool fHelp)
     return "monitoring "+strAddress;
 }
 
-Value refundtransaction(const Array& params, bool fHelp)
-{
-    if (fHelp || params.size() != 2)
-        throw runtime_error(
-            "refundtransaction <pw> <transaction_id> <amount>\n"
-            "Refund <amount> bitcoins to the sender(s) of transaction <transaction_id>.\n");
-
-    string strTransactionID = params[0].get_str();
-    int64 nAmount = getValidAmount(params[1]);
-
-    uint256 tx_id; tx_id.SetHex(strTransactionID.c_str());
-    CTransaction transaction;
-    if (!transaction.FromHash(tx_id) || transaction.IsCoinBase())
-        throw runtime_error(
-            "refundtransaction\n"
-            "Invalid transaction id\n");
-
-    string refundAddress = transaction.vin[0].Address();
-
-    CWalletTx wtx;
-    wtx.mapValue["message"] = "Refund, transaction "+strTransactionID;
-    wtx.mapValue["to"]      = refundAddress;
-
-    string strError = SendMoneyToBitcoinAddress(refundAddress, nAmount, wtx);
-    if (strError != "")
-        throw runtime_error(strError);
-    return "refunded";
-}
-
 struct tallyitem
 {
     int64 nAmount;
@@ -688,7 +659,6 @@ pair<string, rpcfn_type> pCallTable[] =
     make_pair("listreceivedbyaddress", &listreceivedbyaddress),
     make_pair("listreceivedbylabel",   &listreceivedbylabel),
     make_pair("monitorreceivedbyaddress",  &monitorreceivedbyaddress),
-    make_pair("refundtransaction",     &refundtransaction),
 };
 map<string, rpcfn_type> mapCallTable(pCallTable, pCallTable + sizeof(pCallTable)/sizeof(pCallTable[0]));
 
