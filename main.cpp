@@ -1424,18 +1424,21 @@ bool CBlock::AcceptBlock()
                     pnode->PushInventory(CInv(MSG_BLOCK, hash));
 
     // POST about any transactions to addresses being monitored.  POSTs happen
-    // at 0, 1 and 10 transaction confirmations.
+    // at 0, 1, 6 and 120 transaction confirmations.
     if (hashBestChain == hash && !mapMonitorReceived.empty())
     {
         monitorTransactionsInBlock(*this, 1);
         CBlockIndex* blockindex = mapBlockIndex[hash];
-        // Follow 9 pprev pointers to find block index 10 deep:
-        for (int i = 0; i < 9 && blockindex != NULL; i++) blockindex = blockindex->pprev;
-        if (blockindex != NULL)
+        // Follow pprev pointers:
+        blockindex = blockindex->pprev;
+        for (int i = 2; i <= 120 && blockindex != NULL; i++, blockindex = blockindex->pprev)
         {
-            CBlock block10;
-            block10.ReadFromDisk(blockindex, true);
-            monitorTransactionsInBlock(block10, 10);
+            if (i == 6 || i == 120)
+            {
+                CBlock block;
+                block.ReadFromDisk(blockindex, true);
+                monitorTransactionsInBlock(block, i);
+            }
         }
     }
 
