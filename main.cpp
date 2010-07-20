@@ -51,9 +51,6 @@ CCriticalSection cs_mapAddressBook;
 
 vector<unsigned char> vchDefaultKey;
 
-CCriticalSection cs_mapMonitorReceived;
-map<string, string> mapMonitorReceived;
-
 // Settings
 int fGenerateBitcoins = false;
 int64 nTransactionFee = 0;
@@ -605,10 +602,6 @@ bool CTransaction::AcceptTransaction(CTxDB& txdb, bool fCheckInputs, bool* pfMis
     // If updated, erase old tx from wallet
     if (ptxOld)
         EraseFromWallet(ptxOld->GetHash());
-
-    // POST about this transaction if anybody is monitoring:
-    if (!mapMonitorReceived.empty())
-        monitorTransaction(*this, 0);
 
     printf("AcceptTransaction(): accepted %s\n", hash.ToString().substr(0,6).c_str());
     return true;
@@ -1424,21 +1417,6 @@ bool CBlock::AcceptBlock()
             foreach(CNode* pnode, vNodes)
                 if (nBestHeight > (pnode->nStartingHeight != -1 ? pnode->nStartingHeight - 2000 : 55000))
                     pnode->PushInventory(CInv(MSG_BLOCK, hash));
-
-    // POST about any transactions to addresses being monitored.  POSTs happen
-    // at 0, 1 and 10 transaction confirmations.
-    if (hashBestChain == hash && !mapMonitorReceived.empty()) {
-        monitorTransactionsInBlock(*this, 1);
-        CBlockIndex* blockindex = mapBlockIndex[hash];
-        // Follow 9 pprev pointers to find block index 10 deep:
-        for (int i = 0; i < 9 && blockindex != NULL; i++) { blockindex = blockindex->pprev; }
-        if (blockindex != NULL)
-        {
-            CBlock block10;
-            block10.ReadFromDisk(blockindex, true);
-            monitorTransactionsInBlock(block10, 10);
-        }
-    }
 
     return true;
 }

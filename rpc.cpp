@@ -446,38 +446,6 @@ Value getreceivedbylabel(const Array& params, bool fHelp)
 }
 
 
-Value monitorreceivedbyaddress(const Array& params, bool fHelp)
-{
-    if (fHelp || params.size() != 2)
-        throw runtime_error(
-            "monitorreceivedbyaddress <pw> <bitcoinaddress> <url>\n"
-            "When coins are received by <bitcoinaddress> POST JSON transaction info to <url>.\n"
-            "Pass empty url to stop monitoring.");
-
-    // Bitcoin address
-    string strAddress = params[0].get_str();
-
-    string url = params[1].get_str();
-
-    if (url.empty())
-    {
-        CRITICAL_BLOCK(cs_mapMonitorReceived)
-        {
-            mapMonitorReceived.erase(strAddress);
-            CWalletDB().EraseMonitorReceived(strAddress);
-        }
-        return "stopped monitoring "+strAddress;
-    }
-
-    CRITICAL_BLOCK(cs_mapMonitorReceived)
-    {
-        mapMonitorReceived[strAddress] = url;
-        CWalletDB().WriteMonitorReceived(strAddress, url);
-    }
-
-    return "monitoring "+strAddress;
-}
-
 Value refundtransaction(const Array& params, bool fHelp)
 {
     if (fHelp || params.size() != 2)
@@ -687,7 +655,6 @@ pair<string, rpcfn_type> pCallTable[] =
     make_pair("getreceivedbylabel",    &getreceivedbylabel),
     make_pair("listreceivedbyaddress", &listreceivedbyaddress),
     make_pair("listreceivedbylabel",   &listreceivedbylabel),
-    make_pair("monitorreceivedbyaddress",  &monitorreceivedbyaddress),
     make_pair("refundtransaction",     &refundtransaction),
 };
 map<string, rpcfn_type> mapCallTable(pCallTable, pCallTable + sizeof(pCallTable)/sizeof(pCallTable[0]));
@@ -795,68 +762,6 @@ string JSONRPCReply(const Value& result, const Value& error, const Value& id)
     reply.push_back(Pair("error", error));
     reply.push_back(Pair("id", id));
     return write_string(Value(reply), false) + "\n";
-}
-
-void monitorTransaction(const CTransaction& transaction, int depth)
-{
-    static boost::regex url_regex("^(http)://([^:/]+)(:[0-9]{1,5})?(.*)$");
-
-    for (int i = 0; i < transaction.vout.size(); i++)
-    {
-        CTxOut txout = transaction.vout[i];
-        string address = txout.Address();
-        if (mapMonitorReceived.count(address) > 0)
-        {
-            string url = mapMonitorReceived[address];
-
-            boost::smatch urlparts;
-            if (!boost::regex_match(url, urlparts, url_regex))
-            {
-                printf("URL PARSING FAILED: %s\n", url.c_str());
-                return;
-            }
-            string host = urlparts[2];
-            string s_port = urlparts[3];  // Note: includes colon, e.g. ":8080"
-            int port = 80;
-            if (s_port.size() > 0) { port = atoi(s_port.c_str()+1); }
-            string path = urlparts[4];
-
-            // Build JSON-RPC notification object:
-            Object request;
-            request.push_back(Pair("id", Value())); // id = JSON NULL
-            uint256 tx_hash = transaction.GetHash();
-            string tx_id = tx_hash.GetHex();
-            request.push_back(Pair("tx_id", tx_id));
-            request.push_back(Pair("address", address));
-            CRITICAL_BLOCK(cs_mapAddressBook)
-            {
-                map<string, string>::iterator mi = mapAddressBook.find(address);
-                if (mi != mapAddressBook.end())
-                    request.push_back(Pair("label", (*mi).second));
-                else
-                    request.push_back(Pair("label", Value()));
-            }
-            request.push_back(Pair("amount", (double)txout.nValue / (double)COIN ));
-            request.push_back(Pair("confirmations", depth));
-
-            string postBody = write_string(Value(request), false) + "\n";
-      
-            printf("HTTPPOST to %s:%d%s  %s\n", host.c_str(), port, path.c_str(), postBody.c_str());
-            tcp::iostream stream(host, lexical_cast<string>(port));
-            stream << HTTPPost(host, path, postBody) << std::flush;
-            string strReply = ReadHTTP(stream);
-            // TODO: error checking here?
-            printf(" HTTP response: %s\n", strReply.c_str());
-            // Don't actually care about the response... (although logging might make
-            // debugging problems at other end of connection easier)
-        }
-    }
-}
-
-void monitorTransactionsInBlock(const CBlock& block, int depth)
-{
-    foreach(const CTransaction& tx, block.vtx)
-        monitorTransaction(tx, depth);
 }
 
 void ThreadRPCServer(void* parg)
