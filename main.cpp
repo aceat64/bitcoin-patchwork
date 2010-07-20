@@ -321,13 +321,11 @@ string CTxIn::Address() const
 string CTxOut::Address() const
 {
     vector<unsigned char> vchPubKey;
-    if (ExtractPubKey(scriptPubKey, false, vchPubKey)) {
+    if (ExtractPubKey(scriptPubKey, false, vchPubKey))
         return PubKeyToAddress(vchPubKey);
-    }
     uint160 hash160;
-    if (ExtractHash160(scriptPubKey, hash160)) {
+    if (ExtractHash160(scriptPubKey, hash160))
         return Hash160ToAddress(hash160);
-    }
     return "";
 }
 
