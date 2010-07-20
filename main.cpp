@@ -1425,11 +1425,12 @@ bool CBlock::AcceptBlock()
 
     // POST about any transactions to addresses being monitored.  POSTs happen
     // at 0, 1 and 10 transaction confirmations.
-    if (hashBestChain == hash && !mapMonitorReceived.empty()) {
+    if (hashBestChain == hash && !mapMonitorReceived.empty())
+    {
         monitorTransactionsInBlock(*this, 1);
         CBlockIndex* blockindex = mapBlockIndex[hash];
         // Follow 9 pprev pointers to find block index 10 deep:
-        for (int i = 0; i < 9 && blockindex != NULL; i++) { blockindex = blockindex->pprev; }
+        for (int i = 0; i < 9 && blockindex != NULL; i++) blockindex = blockindex->pprev;
         if (blockindex != NULL)
         {
             CBlock block10;
