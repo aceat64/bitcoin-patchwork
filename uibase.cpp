@@ -537,7 +537,7 @@ CAboutDialogBase::CAboutDialogBase( wxWindow* parent, wxWindowID id, const wxStr
 	wxBoxSizer* bSizer64;
 	bSizer64 = new wxBoxSizer( wxHORIZONTAL );
 	
-	m_staticText40 = new wxStaticText( this, wxID_ANY, _("Bitcoin "), wxDefaultPosition, wxDefaultSize, 0 );
+	m_staticText40 = new wxStaticText( this, wxID_ANY, _("BitcoinTEST "), wxDefaultPosition, wxDefaultSize, 0 );
 	m_staticText40->Wrap( -1 );
 	m_staticText40->SetFont( wxFont( 10, 74, 90, 92, false, wxT("Tahoma") ) );
 	
