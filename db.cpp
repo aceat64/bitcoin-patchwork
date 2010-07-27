@@ -17,7 +17,7 @@ unsigned int nWalletDBUpdated;
 //
 
 static CCriticalSection cs_db;
-static bool fDbEnvInit = false;
+static boost::interprocess::file_lock *dbLock = NULL;
 DbEnv dbenv(0);
 static map<string, int> mapFileUseCount;
 static map<string, Db*> mapDb;
@@ -30,10 +30,10 @@ public:
     }
     ~CDBInit()
     {
-        if (fDbEnvInit)
+        if (dbLock)
         {
             dbenv.close(0);
-            fDbEnvInit = false;
+            delete dbLock; dbLock = NULL;
         }
     }
 }
@@ -54,7 +54,7 @@ CDB::CDB(const char* pszFile, const char* pszMode) : pdb(NULL)
 
     CRITICAL_BLOCK(cs_db)
     {
-        if (!fDbEnvInit)
+        if (!dbLock)
         {
             if (fShutdown)
                 return;
@@ -63,6 +63,16 @@ CDB::CDB(const char* pszFile, const char* pszMode) : pdb(NULL)
             filesystem::create_directory(strLogDir.c_str());
             string strErrorFile = strDataDir + "/db.log";
             printf("dbenv.open strLogDir=%s strErrorFile=%s\n", strLogDir.c_str(), strErrorFile.c_str());
+
+            // if strErrorFile exists and is locked, exception: another Bitcoin must
+            // be using this DataDir:
+            if (boost::filesystem::exists(strErrorFile))
+            {
+                dbLock = new boost::interprocess::file_lock(strErrorFile.c_str());
+                bool locked = dbLock->try_lock();
+                if (!locked)
+                    throw runtime_error(_("Cannot lock db.log, is bitcoin already running?\n"));
+            }
 
             dbenv.set_lg_dir(strLogDir.c_str());
             dbenv.set_lg_max(10000000);
@@ -82,7 +92,12 @@ CDB::CDB(const char* pszFile, const char* pszMode) : pdb(NULL)
                              S_IRUSR | S_IWUSR);
             if (ret > 0)
                 throw runtime_error(strprintf("CDB() : error %d opening database environment\n", ret));
-            fDbEnvInit = true;
+
+            if (!dbLock)
+            {
+                dbLock = new boost::interprocess::file_lock(strErrorFile.c_str());
+                dbLock->lock();
+            }
         }
 
         strFile = pszFile;
@@ -162,8 +177,8 @@ void DBFlush(bool fShutdown)
 {
     // Flush log data to the actual data file
     //  on all files that are not in use
-    printf("DBFlush(%s)%s\n", fShutdown ? "true" : "false", fDbEnvInit ? "" : " db not started");
-    if (!fDbEnvInit)
+    printf("DBFlush(%s)%s\n", fShutdown ? "true" : "false", dbLock ? "" : " db not started");
+    if (!dbLock)
         return;
     CRITICAL_BLOCK(cs_db)
     {
@@ -191,7 +206,7 @@ void DBFlush(bool fShutdown)
             if (mapFileUseCount.empty())
                 dbenv.log_archive(&listp, DB_ARCH_REMOVE);
             dbenv.close(0);
-            fDbEnvInit = false;
+            delete dbLock; dbLock = NULL;
         }
     }
 }
