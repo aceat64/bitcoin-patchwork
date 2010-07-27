@@ -76,7 +76,8 @@ int main(int argc, char* argv[])
     fDaemon = !fCommandLine;
 
 #ifdef __WXGTK__
-    if (!fCommandLine)
+//    if (!fCommandLine)
+    if (0)
     {
         // Daemonize
         pid_t pid = fork();
@@ -155,6 +156,8 @@ bool AppInit2(int argc, char* argv[])
             "  -gen=0          \t  " + _("Don't generate coins\n") +
             "  -min            \t  " + _("Start minimized\n") +
             "  -datadir=<dir>  \t  " + _("Specify data directory\n") +
+            "  -port=<port>    \t  " + _("Specify listen port\n") +
+            "  -rpcport=<port> \t  " + _("Specify JSON-RPC port\n") +
             "  -proxy=<ip:port>\t  " + _("Connect through socks4 proxy\n") +
             "  -addnode=<ip>   \t  " + _("Add a node to connect to\n") +
             "  -connect=<ip>   \t  " + _("Connect only to the specified node\n") +
@@ -172,6 +175,9 @@ bool AppInit2(int argc, char* argv[])
 #endif
         return false;
     }
+
+    if (mapArgs.count("-port"))
+        SetListenPort(atoi(mapArgs["-port"]));
 
     if (mapArgs.count("-debug"))
         fDebug = true;
@@ -210,7 +216,7 @@ bool AppInit2(int argc, char* argv[])
     //
 #if defined(__WXMSW__) && defined(GUI)
     // todo: wxSingleInstanceChecker wasn't working on Linux, never deleted its lock file
-    //  maybe should go by whether successfully bind port 18333 instead
+    //  maybe should go by whether successfully bind port instead
     wxString strMutexName = wxString("bitcoin_running.") + getenv("HOMEPATH");
     for (int i = 0; i < strMutexName.size(); i++)
         if (!isalnum(strMutexName[i]))

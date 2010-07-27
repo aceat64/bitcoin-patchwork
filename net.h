@@ -12,7 +12,6 @@ extern int nBestHeight;
 
 
 
-static const unsigned short DEFAULT_PORT = 0x9d47; // htons(18333)
 static const unsigned int PUBLISH_HOPS = 5;
 enum
 {
@@ -22,6 +21,9 @@ enum
 
 
 
+void SetListenPort(unsigned short nPort);
+unsigned short GetListenPortNS();
+unsigned short GetDefaultPortNS();
 bool ConnectSocket(const CAddress& addrConnect, SOCKET& hSocketRet);
 bool GetMyExternalIP(unsigned int& ipRet);
 bool AddAddress(CAddress addr);
@@ -153,7 +155,7 @@ public:
         Init();
     }
 
-    CAddress(unsigned int ipIn, unsigned short portIn=DEFAULT_PORT, uint64 nServicesIn=NODE_NETWORK)
+    CAddress(unsigned int ipIn, unsigned short portIn, uint64 nServicesIn=NODE_NETWORK)
     {
         Init();
         ip = ipIn;
@@ -188,7 +190,7 @@ public:
         nServices = NODE_NETWORK;
         memcpy(pchReserved, pchIPv4, sizeof(pchReserved));
         ip = INADDR_NONE;
-        port = DEFAULT_PORT;
+        port = GetDefaultPortNS();
         nTime = GetAdjustedTime();
         nLastTry = 0;
     }
@@ -196,7 +198,7 @@ public:
     bool SetAddress(const char* pszIn)
     {
         ip = INADDR_NONE;
-        port = DEFAULT_PORT;
+        port = GetDefaultPortNS();
         char psz[100];
         strlcpy(psz, pszIn, sizeof(psz));
         unsigned int a=0, b=0, c=0, d=0, e=0;

@@ -840,7 +840,13 @@ string JSONRPCReply(const Value& result, const Value& error, const Value& id)
 }
 
 
-
+unsigned short nRPCPort()
+{
+    unsigned short n = 18332;
+    if (!mapArgs["-rpcport"].empty())
+        n = atoi(mapArgs["-rpcport"]);
+    return n;
+}
 
 void ThreadRPCServer(void* parg)
 {
@@ -883,7 +889,7 @@ void ThreadRPCServer2(void* parg)
 
     // Bind to loopback 127.0.0.1 so the socket can only be accessed locally
     boost::asio::io_service io_service;
-    tcp::endpoint endpoint(boost::asio::ip::address_v4::loopback(), 18332);
+    tcp::endpoint endpoint(boost::asio::ip::address_v4::loopback(), nRPCPort());
     tcp::acceptor acceptor(io_service, endpoint);
 
     loop
@@ -980,7 +986,8 @@ Value CallRPC(const string& strMethod, const Array& params)
                 GetConfigFile().c_str()));
 
     // Connect to localhost
-    tcp::iostream stream("127.0.0.1", "18332");
+    std::stringstream ss; ss << nRPCPort();
+    tcp::iostream stream("127.0.0.1", ss.str());
     if (stream.fail())
         throw runtime_error("couldn't connect to server");
 
