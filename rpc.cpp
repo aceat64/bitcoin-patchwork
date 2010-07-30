@@ -54,6 +54,86 @@ void PrintConsole(const char* format, ...)
 ///
 
 
+Value gethps(const Array& params, bool fHelp) {
+    if (fHelp || params.size() != 0)
+        throw runtime_error(
+            "gethps\n"
+            "Return the number of hashes / second generated.");
+    
+    return (uint64_t)dHashesPerSec;
+}
+
+Value getkhps(const Array& params, bool fHelp) {
+   if (fHelp || params.size() != 0)
+        throw runtime_error(
+            "getkhps\n"
+            "Return the number of kilohashes / second generated.");
+    
+    return (uint64_t)dHashesPerSec/1000;
+}
+
+Value listgenerated(const Array& params, bool fHelp) {
+  if (fHelp || params.size() > 1)
+        throw runtime_error(
+            "listgenerated [pendingOnly=false]\n"
+            "Returns an array of objects describing generated blocks.\n"
+	    "If pendingOnly == true, returns only unmatured but accepted blocks.\n");
+
+    // List all generated or only unconfirmed?
+    int fPendingOnly = 0;
+    if (params.size() > 0)
+      fPendingOnly = params[0].get_bool();
+
+    // Tally
+    CRITICAL_BLOCK(cs_mapWallet)
+    {
+      string strDescription;
+      Array ret;
+      for (map<uint256, CWalletTx>::iterator it = mapWallet.begin(); it != mapWallet.end(); ++it) {
+	const CWalletTx& wtx = (*it).second;
+	if (wtx.IsCoinBase()) {
+	  int64 nUnmatured = 0;
+	  int64 genTime = wtx.GetTxTime();
+
+	  foreach(const CTxOut& txout, wtx.vout)
+	    nUnmatured += txout.GetCredit();
+
+	  if (wtx.IsInMainChain()) {
+	    // Check if the block was requested by anyone
+	    if (GetAdjustedTime() - wtx.nTimeReceived > 2 * 60 && wtx.GetRequestCount() == 0) { // No
+	      Object obj;
+	      obj.push_back(Pair("value",         (double)nUnmatured/(double)COIN));
+	      obj.push_back(Pair("maturesIn",     wtx.GetBlocksToMaturity()));
+	      obj.push_back(Pair("accepted",      false));
+	      obj.push_back(Pair("confirmations", wtx.GetDepthInMainChain()));
+	      obj.push_back(Pair("genTime",       (uint64_t)genTime));
+	      if(!fPendingOnly) ret.push_back(obj);
+	    } else { // Yes
+	      Object obj;
+	      obj.push_back(Pair("value",         (double)nUnmatured/(double)COIN));
+	      obj.push_back(Pair("maturesIn",     wtx.GetBlocksToMaturity()));
+	      obj.push_back(Pair("accepted",      true));
+	      obj.push_back(Pair("confirmations", wtx.GetDepthInMainChain()));
+	      obj.push_back(Pair("genTime",       (uint64_t)genTime));
+	      if(!fPendingOnly || wtx.GetBlocksToMaturity() > 0)
+		ret.push_back(obj);
+	    }
+	  } else { // Rejected
+	      Object obj;
+	      obj.push_back(Pair("value",         (double)nUnmatured/(double)COIN));
+	      obj.push_back(Pair("maturesIn",     -1));
+	      obj.push_back(Pair("accepted",      false));
+	      obj.push_back(Pair("confirmations", 0));
+	      obj.push_back(Pair("genTime",       (uint64_t)genTime));
+	      if(!fPendingOnly) ret.push_back(obj);
+	  }
+	}
+      }
+      return ret;
+    }
+}
+
+
 Value help(const Array& params, bool fHelp)
 {
     if (fHelp || params.size() != 0)
@@ -222,6 +302,7 @@ Value getinfo(const Array& params, bool fHelp)
     obj.push_back(Pair("generate",      (bool)fGenerateBitcoins));
     obj.push_back(Pair("genproclimit",  (int)(fLimitProcessors ? nLimitProcessors : -1)));
     obj.push_back(Pair("difficulty",    (double)GetDifficulty()));
+    obj.push_back(Pair("KHPS",          (uint64_t)dHashesPerSec/1000));
     return obj;
 }
 
@@ -342,25 +423,207 @@ Value sendtoaddress(const Array& params, bool fHelp)
     return "sent";
 }
 
+enum txn_classification
+{
+	txn_unknown,
+	txn_generated,
+	txn_credit,
+	txn_debit,
+	txn_mixed_debit,
+};
+
+static const char *txn_class_str[] = {
+	"unknown",
+	"generated",
+	"credit",
+	"debit",
+	"mixed_debit",
+};
+
+struct txnitem
+{
+    uint160 hash160;
+    int64 nAmount;
+    int nConf;
+    enum txn_classification txnClass;
+    txnitem()
+    {
+	hash160 = 0;
+        nAmount = 0;
+        nConf = INT_MAX;
+	txnClass = txn_unknown;
+    }
+};
+
+bool txnitem_cmp(const txnitem& a, const txnitem &b)
+{
+	return a.nConf < b.nConf;
+}
+
+Value ListTransactions(int64 nCount, int64 nMinDepth, bool fGenerated)
+{
+    vector<txnitem> tv;
+    CRITICAL_BLOCK(cs_mapWallet)
+    {
+        for (map<uint256, CWalletTx>::iterator it = mapWallet.begin(); it != mapWallet.end(); ++it)
+        {
+            const CWalletTx& wtx = (*it).second;
+	    int64 nCredit = wtx.GetCredit(true);
+	    int64 nDebit = wtx.GetDebit();
+	    int64 nNet = nCredit - nDebit;
+
+	    bool gen = wtx.IsCoinBase();
+            if (gen) {
+		if (!fGenerated)
+			continue;
+	    	if (!wtx.IsInMainChain())
+			continue;
+	    }
+
+            int nDepth = wtx.GetDepthInMainChain();
+            if (nDepth < nMinDepth)
+                continue;
+
+	    if (nNet > 0)
+	    {
+                foreach(const CTxOut& txout, wtx.vout)
+                {
+                    uint160 hash160 = txout.scriptPubKey.GetBitcoinAddressHash160();
+
+		    if (!txout.IsMine())
+			    continue;
+
+                    txnitem item;
+		    item.hash160 = hash160;
+                    item.nAmount = txout.nValue;
+                    item.nConf = min(item.nConf, nDepth);
+		    if (gen)
+		        item.txnClass = txn_generated;
+		    else
+		        item.txnClass = txn_credit;
+
+		    tv.push_back(item);
+                }
+            }
+	    else
+	    {
+	    	bool fAllFromMe = true;
+		foreach(const CTxIn& txin, wtx.vin)
+		    fAllFromMe = fAllFromMe && txin.IsMine();
+
+		bool fAllToMe = true;
+		foreach(const CTxOut& txout, wtx.vout)
+		    fAllToMe = fAllToMe && txout.IsMine();
+
+		if (fAllFromMe && fAllToMe)	// payment to self
+		{
+                    txnitem item;
+		    item.hash160 = wtx.vout[0].scriptPubKey.GetBitcoinAddressHash160();
+                    item.nAmount = wtx.vout[0].nValue;
+                    item.nConf = min(item.nConf, nDepth);
+		    item.txnClass = txn_credit;	// take your pick, cred or deb
+
+		    tv.push_back(item);
+		}
+		else if (fAllFromMe)		// debit txn
+		{
+		    int64 nTxFee = nDebit - wtx.GetValueOut();
+		    for (int nOut = 0; nOut < wtx.vout.size(); nOut++)
+		    {
+		    	const CTxOut& txout = wtx.vout[nOut];
+			if (txout.IsMine())
+			    continue;
+
+                        uint160 hash160;
+			ExtractHash160(txout.scriptPubKey, hash160);
+
+			int64 nValue = txout.nValue;
+			if (nTxFee > 0)
+			{
+				nValue += nTxFee;
+				nTxFee = 0;
+			}
+
+                        txnitem item;
+		        item.hash160 = hash160;
+                        item.nAmount = nValue;
+                        item.nConf = min(item.nConf, nDepth);
+			item.txnClass = txn_debit;
+
+		        tv.push_back(item);
+		    }
+		}
+		else				// mixed debit txn
+		{				// can't separate payees
+                    txnitem item;
+                    item.nAmount = nNet;
+                    item.nConf = min(item.nConf, nDepth);
+		    item.txnClass = txn_mixed_debit;
+
+		    tv.push_back(item);
+		}
+	    }
+        }
+    }
+
+    std::sort(tv.begin(), tv.end(), txnitem_cmp);
+
+    // Reply
+    Array ret;
+    int64 returned = 0;
+    CRITICAL_BLOCK(cs_mapAddressBook)
+    {
+        foreach(const txnitem& txn, tv)
+	{
+	    if ((nCount > 0) && (returned >= nCount))
+	    	break;
+
+	    string strAddress = Hash160ToAddress(txn.hash160);
+	    string strLabel, strClass;
+            int64 nAmount = txn.nAmount;
+            int nConf = txn.nConf;
+
+	    map<string, string>::iterator mi = mapAddressBook.find(strAddress);
+	    if (mi != mapAddressBook.end())
+		strLabel = (*mi).second;
+
+	    strClass = txn_class_str[txn.txnClass];
+
+            Object obj;
+            obj.push_back(Pair("address",       strAddress));
+            obj.push_back(Pair("label",         strLabel));
+            obj.push_back(Pair("class",         strClass));
+            obj.push_back(Pair("amount",        (double)nAmount /(double)COIN));
+            obj.push_back(Pair("confirmations", (nConf == INT_MAX ? 0 :nConf)));
+            ret.push_back(obj);
+
+	    returned++;
+        }
+    }
+
+    return ret;
+}
 
 Value listtransactions(const Array& params, bool fHelp)
 {
-    if (fHelp || params.size() > 2)
+    if (fHelp || params.size() > 3)
         throw runtime_error(
-            "listtransactions [count=10] [includegenerated=false]\n"
+            "listtransactions [count=10] [minconf=1] [includegenerated=true]\n"
             "Returns up to [count] most recent transactions.");
 
     int64 nCount = 10;
     if (params.size() > 0)
         nCount = params[0].get_int64();
-    bool fGenerated = false;
-    if (params.size() > 1)
-        fGenerated = params[1].get_bool();
 
-    Array ret;
-    //// not finished
-    ret.push_back("not implemented yet");
-    return ret;
+    int64 nMinDepth = 1;
+    if (params.size() > 1)
+        nMinDepth = params[1].get_int64();
+
+    bool fGenerated = true;
+    if (params.size() > 2)
+        fGenerated = params[2].get_bool();
+
+    return ListTransactions(nCount, nMinDepth, fGenerated);
 }
 
 
@@ -617,6 +880,9 @@ Value listreceivedbylabel(const Array& params, bool fHelp)
 
 pair<string, rpcfn_type> pCallTable[] =
 {
+    make_pair("gethps",                &gethps),
+    make_pair("getkhps",               &getkhps),
+    make_pair("listgenerated",         &listgenerated),
     make_pair("help",                  &help),
     make_pair("stop",                  &stop),
     make_pair("getblockcount",         &getblockcount),
@@ -638,6 +904,7 @@ pair<string, rpcfn_type> pCallTable[] =
     make_pair("getreceivedbylabel",    &getreceivedbylabel),
     make_pair("listreceivedbyaddress", &listreceivedbyaddress),
     make_pair("listreceivedbylabel",   &listreceivedbylabel),
+    make_pair("listtransactions",      &listtransactions),
 };
 map<string, rpcfn_type> mapCallTable(pCallTable, pCallTable + sizeof(pCallTable)/sizeof(pCallTable[0]));
 
@@ -775,6 +1042,8 @@ string EncodeBase64(string s)
     string result(bptr->data, bptr->length);
     BIO_free_all(b64);
 
+    result.erase(std::remove(result.begin(), result.end(), '\n'), result.end());
+    result.erase(std::remove(result.begin(), result.end(), '\r'), result.end());
     return result;
 }
 
@@ -1088,11 +1357,13 @@ int CommandLineRPC(int argc, char *argv[])
             //
             // Special case non-string parameter types
             //
+            if (strMethod == "listgenerated"          && n > 0) ConvertTo<bool>(params[0]);
             if (strMethod == "setgenerate"            && n > 0) ConvertTo<bool>(params[0]);
             if (strMethod == "setgenerate"            && n > 1) ConvertTo<boost::int64_t>(params[1]);
             if (strMethod == "sendtoaddress"          && n > 1) ConvertTo<double>(params[1]);
             if (strMethod == "listtransactions"       && n > 0) ConvertTo<boost::int64_t>(params[0]);
-            if (strMethod == "listtransactions"       && n > 1) ConvertTo<bool>(params[1]);
+            if (strMethod == "listtransactions"       && n > 1) ConvertTo<boost::int64_t>(params[1]);
+            if (strMethod == "listtransactions"       && n > 2) ConvertTo<bool>(params[2]);
             if (strMethod == "getamountreceived"      && n > 1) ConvertTo<boost::int64_t>(params[1]); // deprecated
             if (strMethod == "getreceivedbyaddress"   && n > 1) ConvertTo<boost::int64_t>(params[1]);
             if (strMethod == "getreceivedbylabel"     && n > 1) ConvertTo<boost::int64_t>(params[1]);

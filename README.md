@@ -23,4 +23,5 @@ Installation
 2. Download and extract this repo, or use git to checkout the repo
 
 3. Time to build bitcoind
+
     make -f makefile.unix bitcoind

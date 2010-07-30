@@ -51,6 +51,7 @@ extern int nLimitProcessors;
 extern int fMinimizeToTray;
 extern int fMinimizeOnClose;
 
+extern double dHashesPerSec;
 
 
 
