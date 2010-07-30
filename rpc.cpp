@@ -136,10 +136,15 @@ Value listgenerated(const Array& params, bool fHelp) {
 
 Value help(const Array& params, bool fHelp)
 {
-    if (fHelp || params.size() != 0)
+    if (fHelp || params.size() > 1)
         throw runtime_error(
-            "help\n"
+            "help [command]\n"
             "List commands.");
+
+    string strCmd;
+    bool haveCmd = (params.size() > 0);
+    if (haveCmd)
+    	strCmd = params[0].get_str();
 
     string strRet;
     set<rpcfn_type> setDone;
@@ -150,6 +155,9 @@ Value help(const Array& params, bool fHelp)
         if (strMethod == "getamountreceived" ||
             strMethod == "getallreceived")
             continue;
+	if (haveCmd && (strMethod != strCmd))
+	    continue;
+
         try
         {
             Array params;
@@ -161,7 +169,7 @@ Value help(const Array& params, bool fHelp)
         {
             // Help text is returned in an exception
             string strHelp = string(e.what());
-            if (strHelp.find('\n') != -1)
+            if (!haveCmd && strHelp.find('\n') != -1)
                 strHelp = strHelp.substr(0, strHelp.find('\n'));
             strRet += strHelp + "\n";
         }
@@ -442,12 +450,14 @@ static const char *txn_class_str[] = {
 
 struct txnitem
 {
+    uint256 hash;
     uint160 hash160;
     int64 nAmount;
     int nConf;
     enum txn_classification txnClass;
     txnitem()
     {
+	hash = 0;
 	hash160 = 0;
         nAmount = 0;
         nConf = INT_MAX;
@@ -484,6 +494,8 @@ Value ListTransactions(int64 nCount, int64 nMinDepth, bool fGenerated)
             if (nDepth < nMinDepth)
                 continue;
 
+	    uint256 hash = wtx.GetHash();
+
 	    if (nNet > 0)
 	    {
                 foreach(const CTxOut& txout, wtx.vout)
@@ -494,6 +506,7 @@ Value ListTransactions(int64 nCount, int64 nMinDepth, bool fGenerated)
 			    continue;
 
                     txnitem item;
+		    item.hash = hash;
 		    item.hash160 = hash160;
                     item.nAmount = txout.nValue;
                     item.nConf = min(item.nConf, nDepth);
@@ -518,6 +531,7 @@ Value ListTransactions(int64 nCount, int64 nMinDepth, bool fGenerated)
 		if (fAllFromMe && fAllToMe)	// payment to self
 		{
                     txnitem item;
+		    item.hash = hash;
 		    item.hash160 = wtx.vout[0].scriptPubKey.GetBitcoinAddressHash160();
                     item.nAmount = wtx.vout[0].nValue;
                     item.nConf = min(item.nConf, nDepth);
@@ -545,6 +559,7 @@ Value ListTransactions(int64 nCount, int64 nMinDepth, bool fGenerated)
 			}
 
                         txnitem item;
+		        item.hash = hash;
 		        item.hash160 = hash160;
                         item.nAmount = nValue;
                         item.nConf = min(item.nConf, nDepth);
@@ -556,6 +571,7 @@ Value ListTransactions(int64 nCount, int64 nMinDepth, bool fGenerated)
 		else				// mixed debit txn
 		{				// can't separate payees
                     txnitem item;
+		    item.hash = hash;
                     item.nAmount = nNet;
                     item.nConf = min(item.nConf, nDepth);
 		    item.txnClass = txn_mixed_debit;
@@ -580,6 +596,7 @@ Value ListTransactions(int64 nCount, int64 nMinDepth, bool fGenerated)
 
 	    string strAddress = Hash160ToAddress(txn.hash160);
 	    string strLabel, strClass;
+	    string strHash = txn.hash.GetHex();
             int64 nAmount = txn.nAmount;
             int nConf = txn.nConf;
 
@@ -592,6 +609,7 @@ Value ListTransactions(int64 nCount, int64 nMinDepth, bool fGenerated)
             Object obj;
             obj.push_back(Pair("address",       strAddress));
             obj.push_back(Pair("label",         strLabel));
+            obj.push_back(Pair("txn_id",        strHash));
             obj.push_back(Pair("class",         strClass));
             obj.push_back(Pair("amount",        (double)nAmount /(double)COIN));
             obj.push_back(Pair("confirmations", (nConf == INT_MAX ? 0 :nConf)));

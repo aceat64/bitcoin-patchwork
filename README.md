@@ -12,7 +12,8 @@ Current Patchset
 ----------------
 
 * lachesis's getinfo patch: http://www.alloscomp.com/bitcoin/
-* jgarzik's listtransactions patch: http://www.bitcoin.org/smf/index.php?topic=611.0
+* jgarzik's listtransactions v7 patch: http://gtf.org/garzik/bitcoin/patch.bitcoin-listtransactions
+* jgarzik's patch to display existing extended-help descriptions: http://gtf.org/garzik/bitcoin/patch.bitcoin-help-extended
 
 Installation
 ------------
