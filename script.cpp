@@ -16,7 +16,7 @@ static const CBigNum bnZero(0);
 static const CBigNum bnOne(1);
 static const CBigNum bnFalse(0);
 static const CBigNum bnTrue(1);
-static const int nMaxNumSize = 258;
+static const size_t nMaxNumSize = 258;
 
 
 bool CastToBool(const valtype& vch)
@@ -605,13 +605,13 @@ bool EvalScript(const CScript& script, const CTransaction& txTo, unsigned int nI
                         break;
 
                     case OP_LSHIFT:
-                        if (bn2 < bnZero || bn2 > CBigNum(100))
+                        if (bn2 < bnZero || bn2 > CBigNum(2048))
                             return false;
                         bn = bn1 << bn2.getulong();
                         break;
 
                     case OP_RSHIFT:
-                        if (bn2 < bnZero || bn2 > CBigNum(INT_MAX/4))
+                        if (bn2 < bnZero || bn2 > CBigNum(2048))
                             return false;
                         bn = bn1 >> bn2.getulong();
                         break;
@@ -824,6 +824,9 @@ bool EvalScript(const CScript& script, const CTransaction& txTo, unsigned int nI
         return false;
     }
 
+
+    if (!vfExec.empty())
+        return false;
 
     if (pvStackRet)
         *pvStackRet = stack;
