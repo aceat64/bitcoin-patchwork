@@ -610,7 +610,7 @@ Value ListTransactions(int64 nCount, int64 nMinDepth, bool fGenerated)
             obj.push_back(Pair("address",       strAddress));
             obj.push_back(Pair("label",         strLabel));
             obj.push_back(Pair("txn_id",        strHash));
-            obj.push_back(Pair("class",         strClass));
+            obj.push_back(Pair("category",      strClass));
             obj.push_back(Pair("amount",        (double)nAmount /(double)COIN));
             obj.push_back(Pair("confirmations", (nConf == INT_MAX ? 0 :nConf)));
             ret.push_back(obj);
