@@ -2789,7 +2789,7 @@ void BitcoinMiner()
               {
                 if (GetTimeMillis() - nTimerStart > 4000)
                 {
-                  double dHashesPerSec = 1000.0 * (nMask+1) * nHashCounter / (GetTimeMillis() - nTimerStart);
+                  dHashesPerSec = 1000.0 * (nMask+1) * nHashCounter / (GetTimeMillis() - nTimerStart);
                   nTimerStart = GetTimeMillis();
                   nHashCounter = 0;
                   string strStatus = strprintf("    %.0f khash/s", dHashesPerSec/1000.0);
