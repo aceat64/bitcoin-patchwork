@@ -2556,8 +2556,10 @@ inline void SHA256Transform(void* pstate, void* pinput, const void* pinit)
     CryptoPP::SHA256::Transform((CryptoPP::word32*)pstate, (CryptoPP::word32*)pinput);
 }
 
+// !!!! NPAR must match NPAR in cryptopp/sha256.cpp !!!!
+#define NPAR 32
 
-
+extern void Double_BlockSHA256(const void* pin, void* pout, const void *pinit, unsigned int hash[8][NPAR], const void *init2);
 
 
 void BitcoinMiner()
@@ -2702,108 +2704,126 @@ void BitcoinMiner()
         uint256 hashTarget = CBigNum().SetCompact(pblock->nBits).getuint256();
         uint256 hashbuf[2];
         uint256& hash = *alignup<16>(hashbuf);
+
+        // Cache for NPAR hashes
+        unsigned int thash[8][NPAR];
+
+        unsigned int j;
         loop
         {
-            SHA256Transform(&tmp.hash1, (char*)&tmp.block + 64, &midstate);
-            SHA256Transform(&hash, &tmp.hash1, pSHA256InitState);
+            Double_BlockSHA256((char*)&tmp.block + 64, &tmp.hash1, &midstate, thash, pSHA256InitState);
 
-            if (((unsigned short*)&hash)[14] == 0)
+          for(j = 0; j<NPAR; j++) {
+            if (thash[7][j] == 0)
             {
                 // Byte swap the result after preliminary check
                 for (int i = 0; i < sizeof(hash)/4; i++)
                     ((unsigned int*)&hash)[i] = ByteReverse(((unsigned int*)&hash)[i]);
 
-                if (hash <= hashTarget)
+              // Byte swap the result after preliminary check
+              for (int i = 0; i < sizeof(hash)/4; i++)
+                ((unsigned int*)&hash)[i] = ByteReverse((unsigned int)thash[i][j]);
+
+              if (hash <= hashTarget)
+              {
+                // Double_BlocSHA256 might only calculate parts of the hash.
+                // We'll insert the nonce and get the real hash.
+                //pblock->nNonce = ByteReverse(tmp.block.nNonce + j);
+                //hash = pblock->GetHash();
+
+                pblock->nNonce = ByteReverse(tmp.block.nNonce + j);
+                assert(hash == pblock->GetHash());
+
+                //// debug print
+                printf("BitcoinMiner:\n");
+                printf("proof-of-work found  \n  hash: %s  \ntarget: %s\n", hash.GetHex().c_str(), hashTarget.GetHex().c_str());
+                pblock->print();
+                printf("%s ", DateTimeStrFormat("%x %H:%M", GetTime()).c_str());
+                printf("generated %s\n", FormatMoney(pblock->vtx[0].vout[0].nValue).c_str());
+
+                SetThreadPriority(THREAD_PRIORITY_NORMAL);
+                CRITICAL_BLOCK(cs_main)
                 {
-                    pblock->nNonce = ByteReverse(tmp.block.nNonce);
-                    assert(hash == pblock->GetHash());
+                  if (pindexPrev == pindexBest)
+                  {
+                    // Save key
+                    if (!AddKey(key))
+                      return;
+                    key.MakeNewKey();
 
-                        //// debug print
-                        printf("BitcoinMiner:\n");
-                        printf("proof-of-work found  \n  hash: %s  \ntarget: %s\n", hash.GetHex().c_str(), hashTarget.GetHex().c_str());
-                        pblock->print();
-                        printf("%s ", DateTimeStrFormat("%x %H:%M", GetTime()).c_str());
-                        printf("generated %s\n", FormatMoney(pblock->vtx[0].vout[0].nValue).c_str());
+                    // Track how many getdata requests this block gets
+                    CRITICAL_BLOCK(cs_mapRequestCount)
+                      mapRequestCount[pblock->GetHash()] = 0;
 
-                    SetThreadPriority(THREAD_PRIORITY_NORMAL);
-                    CRITICAL_BLOCK(cs_main)
-                    {
-                        if (pindexPrev == pindexBest)
-                        {
-                            // Save key
-                            if (!AddKey(key))
-                                return;
-                            key.MakeNewKey();
+                    // Process this block the same as if we had received it from another node
+                    if (!ProcessBlock(NULL, pblock.release()))
+                      printf("ERROR in BitcoinMiner, ProcessBlock, block not accepted\n");
 
-                            // Track how many getdata requests this block gets
-                            CRITICAL_BLOCK(cs_mapRequestCount)
-                                mapRequestCount[pblock->GetHash()] = 0;
-
-                            // Process this block the same as if we had received it from another node
-                            if (!ProcessBlock(NULL, pblock.release()))
-                                printf("ERROR in BitcoinMiner, ProcessBlock, block not accepted\n");
-                        }
-                    }
-                    SetThreadPriority(THREAD_PRIORITY_LOWEST);
-
-                    Sleep(500);
-                    break;
+                  }
                 }
+                SetThreadPriority(THREAD_PRIORITY_LOWEST);
+                Sleep(500);
+                break;
+              }
             }
+          }
 
-            // Update nTime every few seconds
-            const unsigned int nMask = 0xffff;
-            if ((++tmp.block.nNonce & nMask) == 0)
+          // Update nonce
+          tmp.block.nNonce += NPAR;
+
+          // Update nTime every few seconds
+          const unsigned int nMask = 0xffff;
+          if ((tmp.block.nNonce & nMask) == 0)
+          {
+            // Meter hashes/sec
+            static int64 nTimerStart;
+            static int nHashCounter;
+            if (nTimerStart == 0)
+              nTimerStart = GetTimeMillis();
+            else
+              nHashCounter++;
+            if (GetTimeMillis() - nTimerStart > 4000)
             {
-                // Meter hashes/sec
-                static int64 nTimerStart;
-                static int nHashCounter;
-                if (nTimerStart == 0)
-                    nTimerStart = GetTimeMillis();
-                else
-                    nHashCounter++;
+              static CCriticalSection cs;
+              CRITICAL_BLOCK(cs)
+              {
                 if (GetTimeMillis() - nTimerStart > 4000)
                 {
-                    static CCriticalSection cs;
-                    CRITICAL_BLOCK(cs)
-                    {
-                        if (GetTimeMillis() - nTimerStart > 4000)
-                        {
-                            dHashesPerSec = 1000.0 * (nMask+1) * nHashCounter / (GetTimeMillis() - nTimerStart);
-                            nTimerStart = GetTimeMillis();
-                            nHashCounter = 0;
-                            string strStatus = strprintf("    %.0f khash/s", dHashesPerSec/1000.0);
-                            UIThreadCall(bind(CalledSetStatusBar, strStatus, 0));
-                            static int64 nLogTime;
-                            if (GetTime() - nLogTime > 30 * 60)
-                            {
-                                nLogTime = GetTime();
-                                printf("%s ", DateTimeStrFormat("%x %H:%M", GetTime()).c_str());
-                                printf("hashmeter %3d CPUs %6.0f khash/s\n", vnThreadsRunning[3], dHashesPerSec/1000.0);
-                            }
-                        }
-                    }
+                  double dHashesPerSec = 1000.0 * (nMask+1) * nHashCounter / (GetTimeMillis() - nTimerStart);
+                  nTimerStart = GetTimeMillis();
+                  nHashCounter = 0;
+                  string strStatus = strprintf("    %.0f khash/s", dHashesPerSec/1000.0);
+                  UIThreadCall(bind(CalledSetStatusBar, strStatus, 0));
+                  static int64 nLogTime;
+                  if (GetTime() - nLogTime > 30 * 60)
+                  {
+                    nLogTime = GetTime();
+                    printf("%s ", DateTimeStrFormat("%x %H:%M", GetTime()).c_str());
+                    printf("hashmeter %3d CPUs %6.0f khash/s\n", vnThreadsRunning[3], dHashesPerSec/1000.0);
+                  }
+                 }
                 }
+              }
 
-                // Check for stop or if block needs to be rebuilt
-                if (fShutdown)
-                    return;
-                if (!fGenerateBitcoins)
-                    return;
-                if (fLimitProcessors && vnThreadsRunning[3] > nLimitProcessors)
-                    return;
-                if (vNodes.empty())
-                    break;
-                if (tmp.block.nNonce == 0)
-                    break;
-                if (nTransactionsUpdated != nTransactionsUpdatedLast && GetTime() - nStart > 60)
-                    break;
-                if (pindexPrev != pindexBest)
-                    break;
+            // Check for stop or if block needs to be rebuilt
+            if (fShutdown)
+              return;
+            if (!fGenerateBitcoins)
+              return;
+            if (fLimitProcessors && vnThreadsRunning[3] > nLimitProcessors)
+              return;
+            if (vNodes.empty())
+              break;
+            if (tmp.block.nNonce == 0)
+              break;
+            if (nTransactionsUpdated != nTransactionsUpdatedLast && GetTime() - nStart > 60)
+              break;
+            if (pindexPrev != pindexBest)
+              break;
 
-                pblock->nTime = max(pindexPrev->GetMedianTimePast()+1, GetAdjustedTime());
-                tmp.block.nTime = ByteReverse(pblock->nTime);
-            }
+            pblock->nTime = max(pindexPrev->GetMedianTimePast()+1, GetAdjustedTime());
+            tmp.block.nTime = ByteReverse(pblock->nTime);
+          }
         }
     }
 }

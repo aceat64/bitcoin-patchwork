@@ -45,7 +45,8 @@ OBJS= \
     obj/rpc.o \
     obj/init.o \
     cryptopp/obj/sha.o \
-    cryptopp/obj/cpu.o
+    cryptopp/obj/cpu.o \
+		cryptopp/obj/sha256.o
 
 
 all: bitcoin
@@ -58,17 +59,19 @@ obj/%.o: %.cpp $(HEADERS) headers.h.gch
 	g++ -c $(CFLAGS) -DGUI -o $@ $<
 
 cryptopp/obj/%.o: cryptopp/%.cpp
-	g++ -c $(CFLAGS) -O3 -DCRYPTOPP_DISABLE_SSE2 -o $@ $<
+	g++ -c $(CFLAGS) -frename-registers -funroll-all-loops -fomit-frame-pointer  -march=native -msse2 -msse3  -ffast-math -O3 -o $@ $<
 
 bitcoin: $(OBJS) obj/ui.o obj/uibase.o
 	g++ $(CFLAGS) -o $@ $(LIBPATHS) $^ $(WXLIBS) $(LIBS)
-
 
 obj/nogui/%.o: %.cpp $(HEADERS)
 	g++ -c $(CFLAGS) -o $@ $<
 
 bitcoind: $(OBJS:obj/%=obj/nogui/%)
 	g++ $(CFLAGS) -o $@ $(LIBPATHS) $^ $(LIBS)
+
+test: cryptopp/obj/sha.o cryptopp/obj/sha256.o test.cpp
+	  g++ $(CFLAGS) -o $@ $(LIBPATHS) $^ $(WXLIBS) $(LIBS)
 
 
 clean:
