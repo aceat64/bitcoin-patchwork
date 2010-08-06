@@ -136,15 +136,10 @@ Value listgenerated(const Array& params, bool fHelp) {
 
 Value help(const Array& params, bool fHelp)
 {
-    if (fHelp || params.size() > 1)
+    if (fHelp || params.size() != 0)
         throw runtime_error(
-            "help [command]\n"
+            "help\n"
             "List commands.");
-
-    string strCmd;
-    bool haveCmd = (params.size() > 0);
-    if (haveCmd)
-    	strCmd = params[0].get_str();
 
     string strRet;
     set<rpcfn_type> setDone;
@@ -155,9 +150,6 @@ Value help(const Array& params, bool fHelp)
         if (strMethod == "getamountreceived" ||
             strMethod == "getallreceived")
             continue;
-	if (haveCmd && (strMethod != strCmd))
-	    continue;
-
         try
         {
             Array params;
@@ -169,7 +161,7 @@ Value help(const Array& params, bool fHelp)
         {
             // Help text is returned in an exception
             string strHelp = string(e.what());
-            if (!haveCmd && strHelp.find('\n') != -1)
+            if (strHelp.find('\n') != -1)
                 strHelp = strHelp.substr(0, strHelp.find('\n'));
             strRet += strHelp + "\n";
         }
@@ -1060,8 +1052,6 @@ string EncodeBase64(string s)
     string result(bptr->data, bptr->length);
     BIO_free_all(b64);
 
-    result.erase(std::remove(result.begin(), result.end(), '\n'), result.end());
-    result.erase(std::remove(result.begin(), result.end(), '\r'), result.end());
     return result;
 }
 
@@ -1233,6 +1223,10 @@ void ThreadRPCServer2(void* parg)
 
                 printf("ThreadRPCServer method=%s\n", strMethod.c_str());
 
+                // Observe lockdown
+                if (IsLockdown() && strMethod != "help" && strMethod != "stop" && strMethod != "getgenerate" && strMethod != "setgenerate")
+                    throw runtime_error("WARNING: Displayed transactions may not be correct!  You may need to upgrade.");
+
                 // Execute
                 map<string, rpcfn_type>::iterator mi = mapCallTable.find(strMethod);
                 if (mi == mapCallTable.end())
@@ -1375,7 +1369,6 @@ int CommandLineRPC(int argc, char *argv[])
             //
             // Special case non-string parameter types
             //
-            if (strMethod == "listgenerated"          && n > 0) ConvertTo<bool>(params[0]);
             if (strMethod == "setgenerate"            && n > 0) ConvertTo<bool>(params[0]);
             if (strMethod == "setgenerate"            && n > 1) ConvertTo<boost::int64_t>(params[1]);
             if (strMethod == "sendtoaddress"          && n > 1) ConvertTo<double>(params[1]);
