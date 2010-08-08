@@ -14,6 +14,12 @@ Current Patchset
 * Jgarzik's getblock patch: http://gtf.org/garzik/bitcoin/patch.bitcoin-getblock
 * ArtForz's patch to check up on BitcoinMiner(): http://pastebin.com/YGUcqPYK
 
+Custom Modifications:
+---------------------
+
+* Removed "-DCRYPTOPP_DISABLE_SSE2" from makefile.unix, since it apparently breaks BitcoinMiner()'s SHA256 hashing on 64bit systems.
+* Changed nMaxConnections from 8 to 16.
+
 Installation
 ------------
 
