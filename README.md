@@ -12,6 +12,7 @@ Current Patchset
 * Lachesis's RPC Calls patch, which also includes jgarzik's listtransactions patch: http://www.alloscomp.com/bitcoin/
 * Jgarzik's extended help patch: http://gtf.org/garzik/bitcoin/patch.bitcoin-help-extended
 * Jgarzik's getblock patch: http://gtf.org/garzik/bitcoin/patch.bitcoin-getblock
+* ArtForz's patch to check up on BitcoinMiner(): http://pastebin.com/YGUcqPYK
 
 Installation
 ------------

@@ -2700,6 +2700,16 @@ void BitcoinMiner()
 
         unsigned int nBlocks0 = FormatHashBlocks(&tmp.block, sizeof(tmp.block));
         unsigned int nBlocks1 = FormatHashBlocks(&tmp.hash1, sizeof(tmp.hash1));
+        
+        //use openssl to calculate what first hash should be
+        SHA256_CTX ossl_state;
+        uint256 ossl_hash;
+        SHA256_Init(&ossl_state);
+        SHA256_Update(&ossl_state, &tmp, 80);
+        SHA256_Final((unsigned char *)(&ossl_hash), &ossl_state);
+        SHA256_Init(&ossl_state);
+        SHA256_Update(&ossl_state, (&ossl_hash), 32);
+        SHA256_Final((unsigned char *)(&ossl_hash), &ossl_state);
 
         // Byte swap all the input buffer
         for (int i = 0; i < sizeof(tmp)/4; i++)
@@ -2718,6 +2728,27 @@ void BitcoinMiner()
         uint256 hashTarget = CBigNum().SetCompact(pblock->nBits).getuint256();
         uint256 hashbuf[2];
         uint256& hash = *alignup<16>(hashbuf);
+
+        //compare first hash against openssl result
+        SHA256Transform(&tmp.hash1, (char*)&tmp.block + 64, &midstate);
+        SHA256Transform(&hash, &tmp.hash1, pSHA256InitState);
+        for (int i = 0; i < sizeof(hash)/4; i++)
+            ((unsigned int*)&hash)[i] = ByteReverse(((unsigned int*)&hash)[i]);
+        if(memcmp(&ossl_hash, &hash, sizeof(uint256)))
+        {
+            printf("ERROR in BitcoinMiner, cryptopp hash doesn't match openssl hash\n");
+            printf("input=");
+            for(int i = 0; i < 80; i++)
+                printf("%02X", ((unsigned char *)&tmp)[i]);
+            printf("\ncpphash=");
+            for(int i = 0; i < 32; i++)
+                printf("%02X", ((unsigned char *)&hash)[i]);
+            printf("\nsslhash=");
+            for(int i = 0; i < 32; i++)
+                printf("%02X", ((unsigned char *)&ossl_hash)[i]);
+            return;
+        }
+
         loop
         {
             SHA256Transform(&tmp.hash1, (char*)&tmp.block + 64, &midstate);
@@ -2988,6 +3019,7 @@ bool CreateTransaction(CScript scriptPubKey, int64 nValue, CWalletTx& wtxNew, CK
     CRITICAL_BLOCK(cs_main)
     {
         // txdb must be opened before the mapWallet lock
+
         CTxDB txdb("r");
         CRITICAL_BLOCK(cs_mapWallet)
         {
