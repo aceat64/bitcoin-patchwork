@@ -19,6 +19,7 @@ Custom Modifications:
 
 * Removed "-DCRYPTOPP_DISABLE_SSE2" from makefile.unix, since it apparently breaks BitcoinMiner()'s SHA256 hashing on 64bit systems.
 * Changed nMaxConnections from 8 to 16.
+* Slight change so that JSON-RPC returns 200 instead of a 500 error with invalid methods/params.
 
 Installation
 ------------
