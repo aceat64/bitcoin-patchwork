@@ -53,6 +53,9 @@ CCriticalSection cs_mapAddressBook;
 
 vector<unsigned char> vchDefaultKey;
 
+double dHashesPerSec;
+int64 nHPSTimerStart;
+
 // Settings
 int fGenerateBitcoins = false;
 int64 nTransactionFee = 0;
@@ -62,7 +65,6 @@ int nLimitProcessors = 1;
 int fMinimizeToTray = true;
 int fMinimizeOnClose = true;
 
-double dHashesPerSec = 0;
 
 
 
@@ -886,7 +888,7 @@ void Lockdown(CBlockIndex* pindexNew)
     printf("Lockdown:  current best=%s  height=%d  work=%s\n", hashBestChain.ToString().substr(0,22).c_str(), nBestHeight, bnBestChainWork.ToString().c_str());
     printf("Lockdown: IsLockdown()=%d\n", (IsLockdown() ? 1 : 0));
     if (IsLockdown())
-        printf("Lockdown: WARNING: Displayed transactions may not be correct!  You may need to upgrade.\n");
+        printf("Lockdown: WARNING: Displayed transactions may not be correct!  You may need to upgrade, or other nodes may need to upgrade.\n");
 }
 
 
@@ -2222,7 +2224,7 @@ bool ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv)
         // This includes all nodes that are currently online,
         // since they rebroadcast an addr every 24 hours
         pfrom->vAddrToSend.clear();
-        int64 nSince = GetAdjustedTime() - 24 * 60 * 60; // in the last 24 hours
+        int64 nSince = GetAdjustedTime() - 12 * 60 * 60; // in the last 12 hours
         CRITICAL_BLOCK(cs_mapAddresses)
         {
             unsigned int nSize = mapAddresses.size();
@@ -2543,6 +2545,9 @@ void ThreadBitcoinMiner(void* parg)
         PrintException(NULL, "ThreadBitcoinMiner()");
     }
     UIThreadCall(bind(CalledSetStatusBar, "", 0));
+    nHPSTimerStart = 0;
+    if (vnThreadsRunning[3] == 0)
+        dHashesPerSec = 0;
     printf("ThreadBitcoinMiner exiting, %d threads remaining\n", vnThreadsRunning[3]);
 }
 
@@ -2700,16 +2705,6 @@ void BitcoinMiner()
 
         unsigned int nBlocks0 = FormatHashBlocks(&tmp.block, sizeof(tmp.block));
         unsigned int nBlocks1 = FormatHashBlocks(&tmp.hash1, sizeof(tmp.hash1));
-        
-        //use openssl to calculate what first hash should be
-        SHA256_CTX ossl_state;
-        uint256 ossl_hash;
-        SHA256_Init(&ossl_state);
-        SHA256_Update(&ossl_state, &tmp, 80);
-        SHA256_Final((unsigned char *)(&ossl_hash), &ossl_state);
-        SHA256_Init(&ossl_state);
-        SHA256_Update(&ossl_state, (&ossl_hash), 32);
-        SHA256_Final((unsigned char *)(&ossl_hash), &ossl_state);
 
         // Byte swap all the input buffer
         for (int i = 0; i < sizeof(tmp)/4; i++)
@@ -2728,27 +2723,6 @@ void BitcoinMiner()
         uint256 hashTarget = CBigNum().SetCompact(pblock->nBits).getuint256();
         uint256 hashbuf[2];
         uint256& hash = *alignup<16>(hashbuf);
-
-        //compare first hash against openssl result
-        SHA256Transform(&tmp.hash1, (char*)&tmp.block + 64, &midstate);
-        SHA256Transform(&hash, &tmp.hash1, pSHA256InitState);
-        for (int i = 0; i < sizeof(hash)/4; i++)
-            ((unsigned int*)&hash)[i] = ByteReverse(((unsigned int*)&hash)[i]);
-        if(memcmp(&ossl_hash, &hash, sizeof(uint256)))
-        {
-            printf("ERROR in BitcoinMiner, cryptopp hash doesn't match openssl hash\n");
-            printf("input=");
-            for(int i = 0; i < 80; i++)
-                printf("%02X", ((unsigned char *)&tmp)[i]);
-            printf("\ncpphash=");
-            for(int i = 0; i < 32; i++)
-                printf("%02X", ((unsigned char *)&hash)[i]);
-            printf("\nsslhash=");
-            for(int i = 0; i < 32; i++)
-                printf("%02X", ((unsigned char *)&ossl_hash)[i]);
-            return;
-        }
-
         loop
         {
             SHA256Transform(&tmp.hash1, (char*)&tmp.block + 64, &midstate);
@@ -2800,25 +2774,28 @@ void BitcoinMiner()
 
             // Update nTime every few seconds
             const unsigned int nMask = 0xffff;
+            const int nHashesPerCycle = (nMask+1);
             if ((++tmp.block.nNonce & nMask) == 0)
             {
                 // Meter hashes/sec
-                static int64 nTimerStart;
-                static int nHashCounter;
-                if (nTimerStart == 0)
-                    nTimerStart = GetTimeMillis();
+                static int nCycleCounter;
+                if (nHPSTimerStart == 0)
+                {
+                    nHPSTimerStart = GetTimeMillis();
+                    nCycleCounter = 0;
+                }
                 else
-                    nHashCounter++;
-                if (GetTimeMillis() - nTimerStart > 4000)
+                    nCycleCounter++;
+                if (GetTimeMillis() - nHPSTimerStart > 4000)
                 {
                     static CCriticalSection cs;
                     CRITICAL_BLOCK(cs)
                     {
-                        if (GetTimeMillis() - nTimerStart > 4000)
+                        if (GetTimeMillis() - nHPSTimerStart > 4000)
                         {
-                            dHashesPerSec = 1000.0 * (nMask+1) * nHashCounter / (GetTimeMillis() - nTimerStart);
-                            nTimerStart = GetTimeMillis();
-                            nHashCounter = 0;
+                            dHashesPerSec = 1000.0 * nHashesPerCycle * nCycleCounter / (GetTimeMillis() - nHPSTimerStart);
+                            nHPSTimerStart = GetTimeMillis();
+                            nCycleCounter = 0;
                             string strStatus = strprintf("    %.0f khash/s", dHashesPerSec/1000.0);
                             UIThreadCall(bind(CalledSetStatusBar, strStatus, 0));
                             static int64 nLogTime;
@@ -3019,7 +2996,6 @@ bool CreateTransaction(CScript scriptPubKey, int64 nValue, CWalletTx& wtxNew, CK
     CRITICAL_BLOCK(cs_main)
     {
         // txdb must be opened before the mapWallet lock
-
         CTxDB txdb("r");
         CRITICAL_BLOCK(cs_mapWallet)
         {

@@ -42,6 +42,8 @@ extern CCriticalSection cs_mapRequestCount;
 extern map<string, string> mapAddressBook;
 extern CCriticalSection cs_mapAddressBook;
 extern vector<unsigned char> vchDefaultKey;
+extern double dHashesPerSec;
+extern int64 nHPSTimerStart;
 
 // Settings
 extern int fGenerateBitcoins;
@@ -52,7 +54,6 @@ extern int nLimitProcessors;
 extern int fMinimizeToTray;
 extern int fMinimizeOnClose;
 
-extern double dHashesPerSec;
 
 
 

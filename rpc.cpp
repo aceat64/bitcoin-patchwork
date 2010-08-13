@@ -53,25 +53,6 @@ void PrintConsole(const char* format, ...)
 /// Note: This interface may still be subject to change.
 ///
 
-
-Value gethps(const Array& params, bool fHelp) {
-    if (fHelp || params.size() != 0)
-        throw runtime_error(
-            "gethps\n"
-            "Return the number of hashes / second generated.");
-    
-    return (uint64_t)dHashesPerSec;
-}
-
-Value getkhps(const Array& params, bool fHelp) {
-   if (fHelp || params.size() != 0)
-        throw runtime_error(
-            "getkhps\n"
-            "Return the number of kilohashes / second generated.");
-    
-    return (uint64_t)dHashesPerSec/1000;
-}
-
 Value listgenerated(const Array& params, bool fHelp) {
   if (fHelp || params.size() > 1)
         throw runtime_error(
@@ -133,18 +114,16 @@ Value listgenerated(const Array& params, bool fHelp) {
     }
 }
 
-
 Value help(const Array& params, bool fHelp)
 {
     if (fHelp || params.size() > 1)
         throw runtime_error(
             "help [command]\n"
-            "List commands.");
+            "List commands, or get help for a command.");
 
-    string strCmd;
-    bool haveCmd = (params.size() > 0);
-    if (haveCmd)
-    	strCmd = params[0].get_str();
+    string strCommand;
+    if (params.size() > 0)
+        strCommand = params[0].get_str();
 
     string strRet;
     set<rpcfn_type> setDone;
@@ -155,9 +134,8 @@ Value help(const Array& params, bool fHelp)
         if (strMethod == "getamountreceived" ||
             strMethod == "getallreceived")
             continue;
-	if (haveCmd && (strMethod != strCmd))
-	    continue;
-
+        if (strCommand != "" && strMethod != strCommand)
+            continue;
         try
         {
             Array params;
@@ -169,11 +147,14 @@ Value help(const Array& params, bool fHelp)
         {
             // Help text is returned in an exception
             string strHelp = string(e.what());
-            if (!haveCmd && strHelp.find('\n') != -1)
-                strHelp = strHelp.substr(0, strHelp.find('\n'));
+            if (strCommand == "")
+                if (strHelp.find('\n') != -1)
+                    strHelp = strHelp.substr(0, strHelp.find('\n'));
             strRet += strHelp + "\n";
         }
     }
+    if (strRet == "")
+        strRet = strprintf("help: unknown command: %s\n", strCommand.c_str());
     strRet = strRet.substr(0,strRet.size()-1);
     return strRet;
 }
@@ -408,13 +389,28 @@ Value setgenerate(const Array& params, bool fHelp)
 }
 
 
+Value gethashespersec(const Array& params, bool fHelp)
+{
+    if (fHelp || params.size() != 0)
+        throw runtime_error(
+            "gethashespersec\n"
+            "Returns a recent hashes per second performance measurement while generating.");
+
+    if (GetTimeMillis() - nHPSTimerStart > 8000)
+        return (boost::int64_t)0;
+    return (boost::int64_t)dHashesPerSec;
+}
+
+
 Value getinfo(const Array& params, bool fHelp)
 {
     if (fHelp || params.size() != 0)
         throw runtime_error(
-            "getinfo");
+            "getinfo\n"
+            "Returns an object containing various state info.");
 
     Object obj;
+    obj.push_back(Pair("version",       (int)VERSION));
     obj.push_back(Pair("balance",       (double)GetBalance() / (double)COIN));
     obj.push_back(Pair("blocks",        (int)nBestHeight + 1));
     obj.push_back(Pair("connections",   (int)vNodes.size()));
@@ -422,7 +418,7 @@ Value getinfo(const Array& params, bool fHelp)
     obj.push_back(Pair("generate",      (bool)fGenerateBitcoins));
     obj.push_back(Pair("genproclimit",  (int)(fLimitProcessors ? nLimitProcessors : -1)));
     obj.push_back(Pair("difficulty",    (double)GetDifficulty()));
-    obj.push_back(Pair("KHPS",          (uint64_t)dHashesPerSec/1000));
+    obj.push_back(Pair("hashespersec",  gethashespersec(params, false)));
     return obj;
 }
 
@@ -851,6 +847,7 @@ Value getreceivedbylabel(const Array& params, bool fHelp)
 }
 
 
+
 struct tallyitem
 {
     int64 nAmount;
@@ -1010,8 +1007,6 @@ Value listreceivedbylabel(const Array& params, bool fHelp)
 
 pair<string, rpcfn_type> pCallTable[] =
 {
-    make_pair("gethps",                &gethps),
-    make_pair("getkhps",               &getkhps),
     make_pair("listgenerated",         &listgenerated),
     make_pair("help",                  &help),
     make_pair("stop",                  &stop),
@@ -1023,6 +1018,7 @@ pair<string, rpcfn_type> pCallTable[] =
     make_pair("getbalance",            &getbalance),
     make_pair("getgenerate",           &getgenerate),
     make_pair("setgenerate",           &setgenerate),
+    make_pair("gethashespersec",       &gethashespersec),
     make_pair("getinfo",               &getinfo),
     make_pair("getnewaddress",         &getnewaddress),
     make_pair("setlabel",              &setlabel),
@@ -1345,8 +1341,8 @@ void ThreadRPCServer2(void* parg)
                 printf("ThreadRPCServer method=%s\n", strMethod.c_str());
 
                 // Observe lockdown
-                if (IsLockdown() && strMethod != "help" && strMethod != "stop" && strMethod != "getgenerate" && strMethod != "setgenerate")
-                    throw runtime_error("WARNING: Displayed transactions may not be correct!  You may need to upgrade.");
+                if (IsLockdown() && !mapArgs.count("-overridesafety") && strMethod != "help" && strMethod != "stop" && strMethod != "getgenerate" && strMethod != "setgenerate")
+                    throw runtime_error("WARNING: Displayed transactions may not be correct!  You may need to upgrade, or other nodes may need to upgrade.");
 
                 // Execute
                 map<string, rpcfn_type>::iterator mi = mapCallTable.find(strMethod);
@@ -1457,59 +1453,39 @@ int CommandLineRPC(int argc, char *argv[])
             argv++;
         }
 
-        // Check that the method exists
+        // Method
         if (argc < 2)
             throw runtime_error("too few parameters");
         string strMethod = argv[1];
-        if (!mapCallTable.count(strMethod))
-            throw runtime_error(strprintf("unknown command: %s", strMethod.c_str()));
 
-        Value result;
-        if (argc == 3 && strcmp(argv[2], "-?") == 0)
-        {
-            // Call help locally, help text is returned in an exception
-            try
-            {
-                map<string, rpcfn_type>::iterator mi = mapCallTable.find(strMethod);
-                Array params;
-                (*(*mi).second)(params, true);
-            }
-            catch (std::exception& e)
-            {
-                result = e.what();
-            }
-        }
-        else
-        {
-            // Parameters default to strings
-            Array params;
-            for (int i = 2; i < argc; i++)
-                params.push_back(argv[i]);
-            int n = params.size();
+        // Parameters default to strings
+        Array params;
+        for (int i = 2; i < argc; i++)
+            params.push_back(argv[i]);
+        int n = params.size();
 
-            //
-            // Special case non-string parameter types
-            //
-            if (strMethod == "setgenerate"            && n > 0) ConvertTo<bool>(params[0]);
-            if (strMethod == "setgenerate"            && n > 1) ConvertTo<boost::int64_t>(params[1]);
-            if (strMethod == "sendtoaddress"          && n > 1) ConvertTo<double>(params[1]);
-            if (strMethod == "listtransactions"       && n > 0) ConvertTo<boost::int64_t>(params[0]);
-            if (strMethod == "listtransactions"       && n > 1) ConvertTo<boost::int64_t>(params[1]);
-            if (strMethod == "listtransactions"       && n > 2) ConvertTo<bool>(params[2]);
-            if (strMethod == "getamountreceived"      && n > 1) ConvertTo<boost::int64_t>(params[1]); // deprecated
-            if (strMethod == "getreceivedbyaddress"   && n > 1) ConvertTo<boost::int64_t>(params[1]);
-            if (strMethod == "getreceivedbylabel"     && n > 1) ConvertTo<boost::int64_t>(params[1]);
-            if (strMethod == "getallreceived"         && n > 0) ConvertTo<boost::int64_t>(params[0]); // deprecated
-            if (strMethod == "getallreceived"         && n > 1) ConvertTo<bool>(params[1]);
-            if (strMethod == "listreceivedbyaddress"  && n > 0) ConvertTo<boost::int64_t>(params[0]);
-            if (strMethod == "listreceivedbyaddress"  && n > 1) ConvertTo<bool>(params[1]);
-            if (strMethod == "listreceivedbylabel"    && n > 0) ConvertTo<boost::int64_t>(params[0]);
-            if (strMethod == "listreceivedbylabel"    && n > 1) ConvertTo<bool>(params[1]);
-            if (strMethod == "getblock"               && n > 0) ConvertTo<boost::int64_t>(params[0]);
+        //
+        // Special case non-string parameter types
+        //
+        if (strMethod == "setgenerate"            && n > 0) ConvertTo<bool>(params[0]);
+        if (strMethod == "setgenerate"            && n > 1) ConvertTo<boost::int64_t>(params[1]);
+        if (strMethod == "sendtoaddress"          && n > 1) ConvertTo<double>(params[1]);
+        if (strMethod == "listtransactions"       && n > 0) ConvertTo<boost::int64_t>(params[0]);
+        if (strMethod == "listtransactions"       && n > 1) ConvertTo<boost::int64_t>(params[1]);
+        if (strMethod == "listtransactions"       && n > 2) ConvertTo<bool>(params[2]);
+        if (strMethod == "getamountreceived"      && n > 1) ConvertTo<boost::int64_t>(params[1]); // deprecated
+        if (strMethod == "getreceivedbyaddress"   && n > 1) ConvertTo<boost::int64_t>(params[1]);
+        if (strMethod == "getreceivedbylabel"     && n > 1) ConvertTo<boost::int64_t>(params[1]);
+        if (strMethod == "getallreceived"         && n > 0) ConvertTo<boost::int64_t>(params[0]); // deprecated
+        if (strMethod == "getallreceived"         && n > 1) ConvertTo<bool>(params[1]);
+        if (strMethod == "listreceivedbyaddress"  && n > 0) ConvertTo<boost::int64_t>(params[0]);
+        if (strMethod == "listreceivedbyaddress"  && n > 1) ConvertTo<bool>(params[1]);
+        if (strMethod == "listreceivedbylabel"    && n > 0) ConvertTo<boost::int64_t>(params[0]);
+        if (strMethod == "listreceivedbylabel"    && n > 1) ConvertTo<bool>(params[1]);
+        if (strMethod == "getblock"               && n > 0) ConvertTo<boost::int64_t>(params[0]);
 
-            // Execute
-            result = CallRPC(strMethod, params);
-        }
+        // Execute
+        Value result = CallRPC(strMethod, params);
 
         // Print result
         string strResult = (result.type() == str_type ? result.get_str() : write_string(result, true));

@@ -9,16 +9,13 @@ Notes
 Current Patchset
 ----------------
 
-* Lachesis's RPC Calls patch, which also includes jgarzik's listtransactions patch: http://www.alloscomp.com/bitcoin/
-* Jgarzik's extended help patch: http://gtf.org/garzik/bitcoin/patch.bitcoin-help-extended
-* Jgarzik's getblock patch: http://gtf.org/garzik/bitcoin/patch.bitcoin-getblock
-* ArtForz's patch to check up on BitcoinMiner(): http://pastebin.com/YGUcqPYK
+* Jgarzik's listtransactions patch: http://www.bitcoin.org/smf/index.php?topic=611.20
+* Jgarzik's getblock patch: http://www.bitcoin.org/smf/index.php?topic=724.0
+* The listgenerated method, lifted from Lachesis's now deprecated RPC Calls patch: http://www.alloscomp.com/bitcoin/
 
 Custom Modifications:
 ---------------------
 
-* Removed "-DCRYPTOPP_DISABLE_SSE2" from makefile.unix, since it apparently breaks BitcoinMiner()'s SHA256 hashing on 64bit systems.
-* Changed nMaxConnections from 8 to 16.
 * Slight change so that JSON-RPC returns 200 instead of a 500 error with invalid methods/params.
 
 Installation
