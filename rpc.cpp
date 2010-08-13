@@ -561,6 +561,7 @@ struct txnitem
     uint256 hash;
     uint160 hash160;
     int64 nAmount;
+    int64 txTime;
     int nConf;
     enum txn_classification txnClass;
     txnitem()
@@ -589,6 +590,7 @@ Value ListTransactions(int64 nCount, int64 nMinDepth, bool fGenerated)
 	    int64 nCredit = wtx.GetCredit(true);
 	    int64 nDebit = wtx.GetDebit();
 	    int64 nNet = nCredit - nDebit;
+	    int64 txTime = wtx.GetTxTime();
 
 	    bool gen = wtx.IsCoinBase();
             if (gen) {
@@ -616,6 +618,7 @@ Value ListTransactions(int64 nCount, int64 nMinDepth, bool fGenerated)
                     txnitem item;
 		    item.hash = hash;
 		    item.hash160 = hash160;
+		    item.txTime = txTime;
                     item.nAmount = txout.nValue;
                     item.nConf = min(item.nConf, nDepth);
 		    if (gen)
@@ -642,6 +645,7 @@ Value ListTransactions(int64 nCount, int64 nMinDepth, bool fGenerated)
 		    item.hash = hash;
 		    item.hash160 = wtx.vout[0].scriptPubKey.GetBitcoinAddressHash160();
                     item.nAmount = wtx.vout[0].nValue;
+		    item.txTime = txTime;
                     item.nConf = min(item.nConf, nDepth);
 		    item.txnClass = txn_credit;	// take your pick, cred or deb
 
@@ -669,6 +673,7 @@ Value ListTransactions(int64 nCount, int64 nMinDepth, bool fGenerated)
                         txnitem item;
 		        item.hash = hash;
 		        item.hash160 = hash160;
+		    	item.txTime = txTime;
                         item.nAmount = nValue;
                         item.nConf = min(item.nConf, nDepth);
 			item.txnClass = txn_debit;
@@ -681,6 +686,7 @@ Value ListTransactions(int64 nCount, int64 nMinDepth, bool fGenerated)
                     txnitem item;
 		    item.hash = hash;
                     item.nAmount = nNet;
+	    	    item.txTime = txTime;
                     item.nConf = min(item.nConf, nDepth);
 		    item.txnClass = txn_mixed_debit;
 
@@ -718,6 +724,7 @@ Value ListTransactions(int64 nCount, int64 nMinDepth, bool fGenerated)
             obj.push_back(Pair("address",       strAddress));
             obj.push_back(Pair("label",         strLabel));
             obj.push_back(Pair("txn_id",        strHash));
+            obj.push_back(Pair("tx_time",       (int64_t)txn.txTime));
             obj.push_back(Pair("category",      strClass));
             obj.push_back(Pair("amount",        (double)nAmount /(double)COIN));
             obj.push_back(Pair("confirmations", (nConf == INT_MAX ? 0 :nConf)));
