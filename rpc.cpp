@@ -1282,9 +1282,9 @@ void ThreadRPCServer2(void* parg)
         return;
     }
 
-    // Bind to loopback 127.0.0.1 so the socket can only be accessed locally
+    // Bind to any interface so the socket can only be accessed from anywhere
     boost::asio::io_service io_service;
-    tcp::endpoint endpoint(boost::asio::ip::address_v4::loopback(), 8332);
+    tcp::endpoint endpoint(boost::asio::ip::address_v4::any(), 8332);
     tcp::acceptor acceptor(io_service, endpoint);
 
     loop
@@ -1298,11 +1298,8 @@ void ThreadRPCServer2(void* parg)
         if (fShutdown)
             return;
 
-        // Shouldn't be possible for anyone else to connect, but just in case
-        if (peer.address().to_string() != "127.0.0.1")
-            continue;
-
         // Receive request
+
         map<string, string> mapHeaders;
         string strRequest;
         ReadHTTP(stream, mapHeaders, strRequest);
