@@ -723,8 +723,8 @@ Value ListTransactions(int64 nCount, int64 nMinDepth, bool fGenerated)
             Object obj;
             obj.push_back(Pair("address",       strAddress));
             obj.push_back(Pair("label",         strLabel));
-            obj.push_back(Pair("txn_id",        strHash));
-            obj.push_back(Pair("tx_time",       (int64_t)txn.txTime));
+            obj.push_back(Pair("txnid",        strHash));
+            obj.push_back(Pair("txtime",       (int64_t)txn.txTime));
             obj.push_back(Pair("category",      strClass));
             obj.push_back(Pair("amount",        (double)nAmount /(double)COIN));
             obj.push_back(Pair("confirmations", (nConf == INT_MAX ? 0 :nConf)));
