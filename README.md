@@ -18,6 +18,7 @@ Custom Modifications:
 
 * Slight change so that JSON-RPC returns 200 instead of a 500 error with invalid methods/params.
 * Slight change so that JSON-RPC binds to all/any IPs instead of just the loopback.
+* Changed MAX_OUTBOUND_CONNECTIONS from 8 to 32.
 
 Installation
 ------------
