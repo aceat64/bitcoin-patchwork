@@ -419,7 +419,7 @@ Value getinfo(const Array& params, bool fHelp)
     obj.push_back(Pair("genproclimit",  (int)(fLimitProcessors ? nLimitProcessors : -1)));
     obj.push_back(Pair("difficulty",    (double)GetDifficulty()));
     obj.push_back(Pair("hashespersec",  gethashespersec(params, false)));
-    obj.push_back(Pair("status",        strWarning));
+    obj.push_back(Pair("errors",        GetWarnings("statusbar")));
     return obj;
 }
 
@@ -1043,6 +1043,25 @@ pair<string, rpcfn_type> pCallTable[] =
 };
 map<string, rpcfn_type> mapCallTable(pCallTable, pCallTable + sizeof(pCallTable)/sizeof(pCallTable[0]));
 
+string pAllowInSafeMode[] =
+{
+    "help",
+    "stop",
+    "getblockcount",
+    "getblocknumber",
+    "getconnectioncount",
+    "getdifficulty",
+    "getgenerate",
+    "setgenerate",
+    "gethashespersec",
+    "getinfo",
+    "getnewaddress",
+    "setlabel",
+    "getlabel",
+    "getaddressesbylabel",
+};
+set<string> setAllowInSafeMode(pAllowInSafeMode, pAllowInSafeMode + sizeof(pAllowInSafeMode)/sizeof(pAllowInSafeMode[0]));
+
 
 
 
@@ -1344,9 +1363,10 @@ void ThreadRPCServer2(void* parg)
 
                 printf("ThreadRPCServer method=%s\n", strMethod.c_str());
 
-                // Observe lockdown
-                if (IsLockdown() && !mapArgs.count("-overridesafety") && strMethod != "help" && strMethod != "stop" && strMethod != "getgenerate" && strMethod != "setgenerate")
-                    throw runtime_error("WARNING: Displayed transactions may not be correct!  You may need to upgrade, or other nodes may need to upgrade.");
+                // Observe safe mode
+                string strWarning = GetWarnings("rpc");
+                if (strWarning != "" && !mapArgs.count("-disablesafemode") && !setAllowInSafeMode.count(strMethod))
+                    throw runtime_error(string("Safe mode: ") + strWarning);
 
                 // Execute
                 map<string, rpcfn_type>::iterator mi = mapCallTable.find(strMethod);
