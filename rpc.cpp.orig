@@ -53,66 +53,6 @@ void PrintConsole(const char* format, ...)
 /// Note: This interface may still be subject to change.
 ///
 
-Value listgenerated(const Array& params, bool fHelp) {
-  if (fHelp || params.size() > 1)
-        throw runtime_error(
-            "listgenerated [pendingOnly=false]\n"
-            "Returns an array of objects describing generated blocks.\n"
-	    "If pendingOnly == true, returns only unmatured but accepted blocks.\n");
-
-    // List all generated or only unconfirmed?
-    int fPendingOnly = 0;
-    if (params.size() > 0)
-      fPendingOnly = params[0].get_bool();
-
-    // Tally
-    CRITICAL_BLOCK(cs_mapWallet)
-    {
-      string strDescription;
-      Array ret;
-      for (map<uint256, CWalletTx>::iterator it = mapWallet.begin(); it != mapWallet.end(); ++it) {
-	const CWalletTx& wtx = (*it).second;
-	if (wtx.IsCoinBase()) {
-	  int64 nUnmatured = 0;
-	  int64 genTime = wtx.GetTxTime();
-
-	  foreach(const CTxOut& txout, wtx.vout)
-	    nUnmatured += txout.GetCredit();
-
-	  if (wtx.IsInMainChain()) {
-	    // Check if the block was requested by anyone
-	    if (GetAdjustedTime() - wtx.nTimeReceived > 2 * 60 && wtx.GetRequestCount() == 0) { // No
-	      Object obj;
-	      obj.push_back(Pair("value",         (double)nUnmatured/(double)COIN));
-	      obj.push_back(Pair("maturesIn",     wtx.GetBlocksToMaturity()));
-	      obj.push_back(Pair("accepted",      false));
-	      obj.push_back(Pair("confirmations", wtx.GetDepthInMainChain()));
-	      obj.push_back(Pair("genTime",       (uint64_t)genTime));
-	      if(!fPendingOnly) ret.push_back(obj);
-	    } else { // Yes
-	      Object obj;
-	      obj.push_back(Pair("value",         (double)nUnmatured/(double)COIN));
-	      obj.push_back(Pair("maturesIn",     wtx.GetBlocksToMaturity()));
-	      obj.push_back(Pair("accepted",      true));
-	      obj.push_back(Pair("confirmations", wtx.GetDepthInMainChain()));
-	      obj.push_back(Pair("genTime",       (uint64_t)genTime));
-	      if(!fPendingOnly || wtx.GetBlocksToMaturity() > 0)
-		ret.push_back(obj);
-	    }
-	  } else { // Rejected
-	      Object obj;
-	      obj.push_back(Pair("value",         (double)nUnmatured/(double)COIN));
-	      obj.push_back(Pair("maturesIn",     -1));
-	      obj.push_back(Pair("accepted",      false));
-	      obj.push_back(Pair("confirmations", 0));
-	      obj.push_back(Pair("genTime",       (uint64_t)genTime));
-	      if(!fPendingOnly) ret.push_back(obj);
-	  }
-	}
-      }
-      return ret;
-    }
-}
 
 Value help(const Array& params, bool fHelp)
 {
@@ -193,118 +133,6 @@ Value getblocknumber(const Array& params, bool fHelp)
 
     return nBestHeight;
 }
-
-Value getblock(const Array& params, bool fHelp)
-{
-    if (fHelp || params.size() != 1)
-        throw runtime_error(
-            "getblock height\n"
-            "Dumps the block existing at specified height");
-
-    int64 height = params[0].get_int64();
-    if (height > nBestHeight)
-        throw runtime_error(
-            "getblock height\n"
-            "Dumps the block existing at specified height");
-
-    string blkname = strprintf("blk%d", height);
-
-    CBlockIndex* pindex;
-    bool found = false;
-
-    for (map<uint256, CBlockIndex*>::iterator mi = mapBlockIndex.begin();
-         mi != mapBlockIndex.end(); ++mi)
-    {
-    	pindex = (*mi).second;
-	if (pindex->nHeight == height) {
-		found = true;
-		break;
-	}
-    }
-
-    if (!found)
-        throw runtime_error(
-            "getblock height\n"
-            "Dumps the block existing at specified height");
-
-    CBlock block;
-    block.ReadFromDisk(pindex);
-    block.BuildMerkleTree();
-
-    Object obj;
-    obj.push_back(Pair("hash", block.GetHash().ToString().c_str()));
-    obj.push_back(Pair("ver", block.nVersion));
-    obj.push_back(Pair("prev_block", block.hashPrevBlock.ToString().c_str()));
-    obj.push_back(Pair("mrkl_root", block.hashMerkleRoot.ToString().c_str()));
-    obj.push_back(Pair("time", (uint64_t)block.nTime));
-    obj.push_back(Pair("bits", (uint64_t)block.nBits));
-    obj.push_back(Pair("nonce", (uint64_t)block.nNonce));
-    obj.push_back(Pair("n_tx", (int)block.vtx.size()));
-
-    Array tx;
-    for (int i = 0; i < block.vtx.size(); i++) {
-    	Object txobj;
-
-	txobj.push_back(Pair("hash", block.vtx[i].GetHash().ToString().c_str()));
-	txobj.push_back(Pair("ver", block.vtx[i].nVersion));
-	txobj.push_back(Pair("vin_sz", (int)block.vtx[i].vin.size()));
-	txobj.push_back(Pair("vout_sz", (int)block.vtx[i].vout.size()));
-	txobj.push_back(Pair("lock_time", (uint64_t)block.vtx[i].nLockTime));
-
-	Array tx_vin;
-	for (int j = 0; j < block.vtx[i].vin.size(); j++) {
-	    Object vino;
-
-	    Object vino_outpt;
-
-	    vino_outpt.push_back(Pair("hash",
-	    	block.vtx[i].vin[j].prevout.hash.ToString().c_str()));
-	    vino_outpt.push_back(Pair("n", (uint64_t)block.vtx[i].vin[j].prevout.n));
-
-	    vino.push_back(Pair("prev_out", vino_outpt));
-
-	    if (block.vtx[i].vin[j].prevout.IsNull())
-	    	vino.push_back(Pair("coinbase", HexStr(
-			block.vtx[i].vin[j].scriptSig.begin(),
-			block.vtx[i].vin[j].scriptSig.end(), false).c_str()));
-	    else
-	    	vino.push_back(Pair("scriptSig", 
-			block.vtx[i].vin[j].scriptSig.ToString().c_str()));
-	    if (block.vtx[i].vin[j].nSequence != UINT_MAX)
-	    	vino.push_back(Pair("sequence", (uint64_t)block.vtx[i].vin[j].nSequence));
-
-	    tx_vin.push_back(vino);
-	}
-
-	Array tx_vout;
-	for (int j = 0; j < block.vtx[i].vout.size(); j++) {
-	    Object vouto;
-
-	    vouto.push_back(Pair("value",
-	    	(double)block.vtx[i].vout[j].nValue / (double)COIN));
-	    vouto.push_back(Pair("scriptPubKey", 
-		block.vtx[i].vout[j].scriptPubKey.ToString().c_str()));
-
-	    tx_vout.push_back(vouto);
-	}
-
-	txobj.push_back(Pair("in", tx_vin));
-	txobj.push_back(Pair("out", tx_vout));
-
-	tx.push_back(txobj);
-    }
-
-    obj.push_back(Pair("tx", tx));
-
-    Array mrkl;
-    for (int i = 0; i < block.vMerkleTree.size(); i++)
-    	mrkl.push_back(block.vMerkleTree[i].ToString().c_str());
-
-    obj.push_back(Pair("mrkl_tree", mrkl));
-
-    return obj;
-}
-
 
 
 Value getconnectioncount(const Array& params, bool fHelp)
@@ -540,224 +368,25 @@ Value sendtoaddress(const Array& params, bool fHelp)
     return "sent";
 }
 
-enum txn_classification
-{
-	txn_unknown,
-	txn_generated,
-	txn_credit,
-	txn_debit,
-	txn_mixed_debit,
-};
-
-static const char *txn_class_str[] = {
-	"unknown",
-	"generated",
-	"credit",
-	"debit",
-	"mixed_debit",
-};
-
-struct txnitem
-{
-    uint256 hash;
-    uint160 hash160;
-    int64 nAmount;
-    int64 txTime;
-    int nConf;
-    enum txn_classification txnClass;
-    txnitem()
-    {
-	hash = 0;
-	hash160 = 0;
-        nAmount = 0;
-        nConf = INT_MAX;
-	txnClass = txn_unknown;
-    }
-};
-
-bool txnitem_cmp(const txnitem& a, const txnitem &b)
-{
-	return a.nConf < b.nConf;
-}
-
-Value ListTransactions(int64 nCount, int64 nMinDepth, bool fGenerated)
-{
-    vector<txnitem> tv;
-    CRITICAL_BLOCK(cs_mapWallet)
-    {
-        for (map<uint256, CWalletTx>::iterator it = mapWallet.begin(); it != mapWallet.end(); ++it)
-        {
-            const CWalletTx& wtx = (*it).second;
-	    int64 nCredit = wtx.GetCredit(true);
-	    int64 nDebit = wtx.GetDebit();
-	    int64 nNet = nCredit - nDebit;
-	    int64 txTime = wtx.GetTxTime();
-
-	    bool gen = wtx.IsCoinBase();
-            if (gen) {
-		if (!fGenerated)
-			continue;
-	    	if (!wtx.IsInMainChain())
-			continue;
-	    }
-
-            int nDepth = wtx.GetDepthInMainChain();
-            if (nDepth < nMinDepth)
-                continue;
-
-	    uint256 hash = wtx.GetHash();
-
-	    if (nNet > 0)
-	    {
-                foreach(const CTxOut& txout, wtx.vout)
-                {
-                    uint160 hash160 = txout.scriptPubKey.GetBitcoinAddressHash160();
-
-		    if (!txout.IsMine())
-			    continue;
-
-                    txnitem item;
-		    item.hash = hash;
-		    item.hash160 = hash160;
-		    item.txTime = txTime;
-                    item.nAmount = txout.nValue;
-                    item.nConf = min(item.nConf, nDepth);
-		    if (gen)
-		        item.txnClass = txn_generated;
-		    else
-		        item.txnClass = txn_credit;
-
-		    tv.push_back(item);
-                }
-            }
-	    else
-	    {
-	    	bool fAllFromMe = true;
-		foreach(const CTxIn& txin, wtx.vin)
-		    fAllFromMe = fAllFromMe && txin.IsMine();
-
-		bool fAllToMe = true;
-		foreach(const CTxOut& txout, wtx.vout)
-		    fAllToMe = fAllToMe && txout.IsMine();
-
-		if (fAllFromMe && fAllToMe)	// payment to self
-		{
-                    txnitem item;
-		    item.hash = hash;
-		    item.hash160 = wtx.vout[0].scriptPubKey.GetBitcoinAddressHash160();
-                    item.nAmount = wtx.vout[0].nValue;
-		    item.txTime = txTime;
-                    item.nConf = min(item.nConf, nDepth);
-		    item.txnClass = txn_credit;	// take your pick, cred or deb
-
-		    tv.push_back(item);
-		}
-		else if (fAllFromMe)		// debit txn
-		{
-		    int64 nTxFee = nDebit - wtx.GetValueOut();
-		    for (int nOut = 0; nOut < wtx.vout.size(); nOut++)
-		    {
-		    	const CTxOut& txout = wtx.vout[nOut];
-			if (txout.IsMine())
-			    continue;
-
-                        uint160 hash160;
-			ExtractHash160(txout.scriptPubKey, hash160);
-
-			int64 nValue = txout.nValue;
-			if (nTxFee > 0)
-			{
-				nValue += nTxFee;
-				nTxFee = 0;
-			}
-
-                        txnitem item;
-		        item.hash = hash;
-		        item.hash160 = hash160;
-		    	item.txTime = txTime;
-                        item.nAmount = nValue;
-                        item.nConf = min(item.nConf, nDepth);
-			item.txnClass = txn_debit;
-
-		        tv.push_back(item);
-		    }
-		}
-		else				// mixed debit txn
-		{				// can't separate payees
-                    txnitem item;
-		    item.hash = hash;
-                    item.nAmount = nNet;
-	    	    item.txTime = txTime;
-                    item.nConf = min(item.nConf, nDepth);
-		    item.txnClass = txn_mixed_debit;
-
-		    tv.push_back(item);
-		}
-	    }
-        }
-    }
-
-    std::sort(tv.begin(), tv.end(), txnitem_cmp);
-
-    // Reply
-    Array ret;
-    int64 returned = 0;
-    CRITICAL_BLOCK(cs_mapAddressBook)
-    {
-        foreach(const txnitem& txn, tv)
-	{
-	    if ((nCount > 0) && (returned >= nCount))
-	    	break;
-
-	    string strAddress = Hash160ToAddress(txn.hash160);
-	    string strLabel, strClass;
-	    string strHash = txn.hash.GetHex();
-            int64 nAmount = txn.nAmount;
-            int nConf = txn.nConf;
-
-	    map<string, string>::iterator mi = mapAddressBook.find(strAddress);
-	    if (mi != mapAddressBook.end())
-		strLabel = (*mi).second;
-
-	    strClass = txn_class_str[txn.txnClass];
-
-            Object obj;
-            obj.push_back(Pair("address",       strAddress));
-            obj.push_back(Pair("label",         strLabel));
-            obj.push_back(Pair("txid",          strHash));
-            obj.push_back(Pair("txtime",        (int64_t)txn.txTime));
-            obj.push_back(Pair("category",      strClass));
-            obj.push_back(Pair("amount",        (double)nAmount /(double)COIN));
-            obj.push_back(Pair("confirmations", (nConf == INT_MAX ? 0 :nConf)));
-            ret.push_back(obj);
-
-	    returned++;
-        }
-    }
-
-    return ret;
-}
 
 Value listtransactions(const Array& params, bool fHelp)
 {
-    if (fHelp || params.size() > 3)
+    if (fHelp || params.size() > 2)
         throw runtime_error(
-            "listtransactions [count=10] [minconf=1] [includegenerated=true]\n"
+            "listtransactions [count=10] [includegenerated=false]\n"
             "Returns up to [count] most recent transactions.");
 
     int64 nCount = 10;
     if (params.size() > 0)
         nCount = params[0].get_int64();
-
-    int64 nMinDepth = 1;
+    bool fGenerated = false;
     if (params.size() > 1)
-        nMinDepth = params[1].get_int64();
+        fGenerated = params[1].get_bool();
 
-    bool fGenerated = true;
-    if (params.size() > 2)
-        fGenerated = params[2].get_bool();
-
-    return ListTransactions(nCount, nMinDepth, fGenerated);
+    Array ret;
+    //// not finished
+    ret.push_back("not implemented yet");
+    return ret;
 }
 
 
@@ -1015,10 +644,8 @@ Value listreceivedbylabel(const Array& params, bool fHelp)
 
 pair<string, rpcfn_type> pCallTable[] =
 {
-    make_pair("listgenerated",         &listgenerated),
     make_pair("help",                  &help),
     make_pair("stop",                  &stop),
-    make_pair("getblock",	       &getblock),
     make_pair("getblockcount",         &getblockcount),
     make_pair("getblocknumber",        &getblocknumber),
     make_pair("getconnectioncount",    &getconnectioncount),
@@ -1039,7 +666,6 @@ pair<string, rpcfn_type> pCallTable[] =
     make_pair("getreceivedbylabel",    &getreceivedbylabel),
     make_pair("listreceivedbyaddress", &listreceivedbyaddress),
     make_pair("listreceivedbylabel",   &listreceivedbylabel),
-    make_pair("listtransactions",      &listtransactions),
 };
 map<string, rpcfn_type> mapCallTable(pCallTable, pCallTable + sizeof(pCallTable)/sizeof(pCallTable[0]));
 
@@ -1302,9 +928,9 @@ void ThreadRPCServer2(void* parg)
         return;
     }
 
-    // Bind to any interface so the socket can only be accessed from anywhere
+    // Bind to loopback 127.0.0.1 so the socket can only be accessed locally
     boost::asio::io_service io_service;
-    tcp::endpoint endpoint(boost::asio::ip::address_v4::any(), 8332);
+    tcp::endpoint endpoint(boost::asio::ip::address_v4::loopback(), 8332);
     tcp::acceptor acceptor(io_service, endpoint);
 
     loop
@@ -1317,6 +943,10 @@ void ThreadRPCServer2(void* parg)
         vnThreadsRunning[4]++;
         if (fShutdown)
             return;
+
+        // Shouldn't be possible for anyone else to connect, but just in case
+        if (peer.address().to_string() != "127.0.0.1")
+            continue;
 
         // Receive request
         map<string, string> mapHeaders;
@@ -1382,7 +1012,7 @@ void ThreadRPCServer2(void* parg)
             {
                 // Send error reply
                 string strReply = JSONRPCReply(Value::null, e.what(), id);
-                stream << HTTPReply(strReply, 200) << std::flush;
+                stream << HTTPReply(strReply, 500) << std::flush;
             }
             if (begin == prev)
                 break;
@@ -1495,8 +1125,7 @@ int CommandLineRPC(int argc, char *argv[])
         if (strMethod == "setgenerate"            && n > 1) ConvertTo<boost::int64_t>(params[1]);
         if (strMethod == "sendtoaddress"          && n > 1) ConvertTo<double>(params[1]);
         if (strMethod == "listtransactions"       && n > 0) ConvertTo<boost::int64_t>(params[0]);
-        if (strMethod == "listtransactions"       && n > 1) ConvertTo<boost::int64_t>(params[1]);
-        if (strMethod == "listtransactions"       && n > 2) ConvertTo<bool>(params[2]);
+        if (strMethod == "listtransactions"       && n > 1) ConvertTo<bool>(params[1]);
         if (strMethod == "getamountreceived"      && n > 1) ConvertTo<boost::int64_t>(params[1]); // deprecated
         if (strMethod == "getreceivedbyaddress"   && n > 1) ConvertTo<boost::int64_t>(params[1]);
         if (strMethod == "getreceivedbylabel"     && n > 1) ConvertTo<boost::int64_t>(params[1]);
@@ -1506,7 +1135,6 @@ int CommandLineRPC(int argc, char *argv[])
         if (strMethod == "listreceivedbyaddress"  && n > 1) ConvertTo<bool>(params[1]);
         if (strMethod == "listreceivedbylabel"    && n > 0) ConvertTo<boost::int64_t>(params[0]);
         if (strMethod == "listreceivedbylabel"    && n > 1) ConvertTo<bool>(params[1]);
-        if (strMethod == "getblock"               && n > 0) ConvertTo<boost::int64_t>(params[0]);
 
         // Execute
         Value result = CallRPC(strMethod, params);
