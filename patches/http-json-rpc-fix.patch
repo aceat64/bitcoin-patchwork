@@ -1,0 +1,13 @@
+Index: rpc.cpp
+===================================================================
+--- rpc.cpp	(revision 130)
++++ rpc.cpp	(working copy)
+@@ -991,7 +991,7 @@
+             {
+                 // Send error reply
+                 string strReply = JSONRPCReply(Value::null, e.what(), id);
+-                stream << HTTPReply(strReply, 500) << std::flush;
++                stream << HTTPReply(strReply, 200) << std::flush;
+             }
+             if (begin == prev)
+                 break;
