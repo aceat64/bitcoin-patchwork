@@ -1382,7 +1382,7 @@ void ThreadRPCServer2(void* parg)
             {
                 // Send error reply
                 string strReply = JSONRPCReply(Value::null, e.what(), id);
-                stream << HTTPReply(strReply, 200) << std::flush;
+                stream << HTTPReply(strReply, 500) << std::flush;
             }
             if (begin == prev)
                 break;
