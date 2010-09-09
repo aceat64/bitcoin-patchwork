@@ -1334,9 +1334,26 @@ void ThreadRPCServer2(void* parg)
         return;
     }
 
-    // Bind to any interface so the socket can only be accessed from anywhere
+    int bindPort, v = atoi(mapArgs["-bindport"]);
+    if (v > 0 && v < 65536)
+	bindPort = v;
+    else
+    	bindPort = 8332;
+
+    bool isLoop = false;
+    boost::asio::ip::address_v4 bindAddr;
+    if (mapArgs["-bindaddr"] == "*" || mapArgs["-bindaddr"] == "0.0.0.0")
+    	bindAddr = boost::asio::ip::address_v4::any();
+    else if (mapArgs.count("-bindaddr"))
+    	bindAddr = boost::asio::ip::address_v4::from_string(mapArgs["-bindaddr"]);
+    else {
+        bindAddr = boost::asio::ip::address_v4::loopback();
+	isLoop = true;
+    }
+
+
     boost::asio::io_service io_service;
-    tcp::endpoint endpoint(boost::asio::ip::address_v4::any(), 8332);
+    tcp::endpoint endpoint(bindAddr, bindPort);
     tcp::acceptor acceptor(io_service, endpoint);
 
     loop
@@ -1349,6 +1366,10 @@ void ThreadRPCServer2(void* parg)
         vnThreadsRunning[4]++;
         if (fShutdown)
             return;
+
+        // Shouldn't be possible for anyone else to connect, but just in case
+        if (isLoop && peer.address().to_string() != "127.0.0.1")
+            continue;
 
         // Receive request
         map<string, string> mapHeaders;
@@ -1459,8 +1480,21 @@ Object CallRPC(const string& strMethod, const Array& params)
               "If the file does not exist, create it with owner-readable-only file permissions."),
                 GetConfigFile().c_str()));
 
+    string strPort;
+    int vport = atoi(mapArgs["-rpcport"]);
+    if (vport > 0 && vport < 65536)
+    	strPort = mapArgs["-rpcport"];
+    else
+        strPort = "8332";
+
+    string strAddr;
+    if (mapArgs.count("-rpcaddr"))
+    	strAddr = mapArgs["-rpcaddr"];
+    else
+    	strAddr = "127.0.0.1";
+
     // Connect to localhost
-    tcp::iostream stream("127.0.0.1", "8332");
+    tcp::iostream stream(strAddr, strPort);
     if (stream.fail())
         throw runtime_error("couldn't connect to server");
 

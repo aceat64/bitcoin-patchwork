@@ -11,12 +11,12 @@ Current Patchset
 
 * Jgarzik's listtransactions patch: http://www.bitcoin.org/smf/index.php?topic=611.20
 * Jgarzik's getblock patch: http://www.bitcoin.org/smf/index.php?topic=724.0
+* Jgarzik's bindaddr patch: http://www.bitcoin.org/smf/index.php?topic=984.0
 * The listgenerated method, lifted from Lachesis's now deprecated RPC Calls patch: http://www.alloscomp.com/bitcoin/
 
 Custom Modifications:
 ---------------------
 
-* Slight change so that JSON-RPC binds to all/any IPs instead of just the loopback.
 * Changed MAX_OUTBOUND_CONNECTIONS from 8 to 32.
 
 Installation
