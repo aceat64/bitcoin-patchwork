@@ -1157,8 +1157,9 @@ int ReadHTTPStatus(tcp::iostream& stream)
     getline(stream, str);
     vector<string> vWords;
     boost::split(vWords, str, boost::is_any_of(" "));
-    int nStatus = atoi(vWords[1].c_str());
-    return nStatus;
+    if (vWords.size() < 2)
+        return 500;
+    return atoi(vWords[1].c_str());
 }
 
 int ReadHTTPHeader(tcp::iostream& stream, map<string, string>& mapHeadersRet)
@@ -1292,6 +1293,17 @@ string JSONRPCReply(const Value& result, const Value& error, const Value& id)
     return write_string(Value(reply), false) + "\n";
 }
 
+bool ClientAllowed(const string& strAddress)
+{
+    if (strAddress == asio::ip::address_v4::loopback().to_string())
+        return true;
+    const vector<string>& vAllow = mapMultiArgs["-rpcallowip"];
+    foreach(string strAllow, vAllow)
+        if (WildcardMatch(strAddress, strAllow))
+            return true;
+    return false;
+}
+
 
 
 
@@ -1334,26 +1346,9 @@ void ThreadRPCServer2(void* parg)
         return;
     }
 
-    int bindPort, v = atoi(mapArgs["-bindport"]);
-    if (v > 0 && v < 65536)
-	bindPort = v;
-    else
-    	bindPort = 8332;
-
-    bool isLoop = false;
-    boost::asio::ip::address_v4 bindAddr;
-    if (mapArgs["-bindaddr"] == "*" || mapArgs["-bindaddr"] == "0.0.0.0")
-    	bindAddr = boost::asio::ip::address_v4::any();
-    else if (mapArgs.count("-bindaddr"))
-    	bindAddr = boost::asio::ip::address_v4::from_string(mapArgs["-bindaddr"]);
-    else {
-        bindAddr = boost::asio::ip::address_v4::loopback();
-	isLoop = true;
-    }
-
-
+    // Bind to loopback 127.0.0.1 so the socket can only be accessed locally
     boost::asio::io_service io_service;
-    tcp::endpoint endpoint(bindAddr, bindPort);
+    tcp::endpoint endpoint(mapArgs.count("-rpcallowip") ? asio::ip::address_v4::any() : asio::ip::address_v4::loopback(), 8332);
     tcp::acceptor acceptor(io_service, endpoint);
 
     loop
@@ -1367,8 +1362,8 @@ void ThreadRPCServer2(void* parg)
         if (fShutdown)
             return;
 
-        // Shouldn't be possible for anyone else to connect, but just in case
-        if (isLoop && peer.address().to_string() != "127.0.0.1")
+        // Restrict callers by IP
+        if (!ClientAllowed(peer.address().to_string()))
             continue;
 
         // Receive request
@@ -1480,21 +1475,8 @@ Object CallRPC(const string& strMethod, const Array& params)
               "If the file does not exist, create it with owner-readable-only file permissions."),
                 GetConfigFile().c_str()));
 
-    string strPort;
-    int vport = atoi(mapArgs["-rpcport"]);
-    if (vport > 0 && vport < 65536)
-    	strPort = mapArgs["-rpcport"];
-    else
-        strPort = "8332";
-
-    string strAddr;
-    if (mapArgs.count("-rpcaddr"))
-    	strAddr = mapArgs["-rpcaddr"];
-    else
-    	strAddr = "127.0.0.1";
-
     // Connect to localhost
-    tcp::iostream stream(strAddr, strPort);
+    tcp::iostream stream(GetArg("-rpcconnect", "127.0.0.1"), "8332");
     if (stream.fail())
         throw runtime_error("couldn't connect to server");
 
