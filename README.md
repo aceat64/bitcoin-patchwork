@@ -17,6 +17,7 @@ Custom Modifications:
 ---------------------
 
 * Changed MAX_OUTBOUND_CONNECTIONS from 8 to 32.
+* Disabled receiving of IP transactions by default, they can be enabled with the -allowiptransactions option.
 
 Installation
 ------------
