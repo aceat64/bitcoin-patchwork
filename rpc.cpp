@@ -202,6 +202,7 @@ Value getblocknumber(const Array& params, bool fHelp)
     return nBestHeight;
 }
 
+
 Value getblock(const Array& params, bool fHelp)
 {
     if (fHelp || params.size() != 1)
@@ -312,7 +313,6 @@ Value getblock(const Array& params, bool fHelp)
 
     return obj;
 }
-
 
 
 Value getconnectioncount(const Array& params, bool fHelp)
@@ -547,6 +547,7 @@ Value sendtoaddress(const Array& params, bool fHelp)
         throw JSONRPCError(-4, strError);
     return "sent";
 }
+
 
 enum txn_classification
 {
@@ -1040,7 +1041,7 @@ pair<string, rpcfn_type> pCallTable[] =
     make_pair("listgenerated",         &listgenerated),
     make_pair("help",                  &help),
     make_pair("stop",                  &stop),
-    make_pair("getblock",	       &getblock),
+    make_pair("getblock",              &getblock),
     make_pair("getblockcount",         &getblockcount),
     make_pair("getblocknumber",        &getblocknumber),
     make_pair("getconnectioncount",    &getconnectioncount),
@@ -1059,10 +1060,10 @@ pair<string, rpcfn_type> pCallTable[] =
     make_pair("getallreceived",        &listreceivedbyaddress), // deprecated, renamed to listreceivedbyaddress
     make_pair("getreceivedbyaddress",  &getreceivedbyaddress),
     make_pair("getreceivedbylabel",    &getreceivedbylabel),
+    make_pair("listtransactions",      &listtransactions),
     make_pair("listreceivedbyaddress", &listreceivedbyaddress),
     make_pair("listreceivedbylabel",   &listreceivedbylabel),
     make_pair("backupwallet",          &backupwallet),
-    make_pair("listtransactions",      &listtransactions),
 };
 map<string, rpcfn_type> mapCallTable(pCallTable, pCallTable + sizeof(pCallTable)/sizeof(pCallTable[0]));
 
@@ -1346,9 +1347,14 @@ void ThreadRPCServer2(void* parg)
         return;
     }
 
-    // Bind to loopback 127.0.0.1 so the socket can only be accessed locally
+    int bindPort, v = atoi(mapArgs["-rpcbindport"]);
+    if (v > 0 && v < 65536)
+	bindPort = v;
+    else
+    	bindPort = 8332;
+
     boost::asio::io_service io_service;
-    tcp::endpoint endpoint(mapArgs.count("-rpcallowip") ? asio::ip::address_v4::any() : asio::ip::address_v4::loopback(), 8332);
+    tcp::endpoint endpoint(mapArgs.count("-rpcallowip") ? asio::ip::address_v4::any() : asio::ip::address_v4::loopback(), bindPort);
     tcp::acceptor acceptor(io_service, endpoint);
 
     loop
@@ -1475,8 +1481,15 @@ Object CallRPC(const string& strMethod, const Array& params)
               "If the file does not exist, create it with owner-readable-only file permissions."),
                 GetConfigFile().c_str()));
 
+    string strPort;
+    int vport = atoi(mapArgs["-rpcport"]);
+    if (vport > 0 && vport < 65536)
+    	strPort = mapArgs["-rpcport"];
+    else
+        strPort = "8332";
+
     // Connect to localhost
-    tcp::iostream stream(GetArg("-rpcconnect", "127.0.0.1"), "8332");
+    tcp::iostream stream(GetArg("-rpcconnect", "127.0.0.1"), strPort);
     if (stream.fail())
         throw runtime_error("couldn't connect to server");
 
@@ -1574,7 +1587,7 @@ int CommandLineRPC(int argc, char *argv[])
         if (strMethod == "listreceivedbyaddress"  && n > 1) ConvertTo<bool>(params[1]);
         if (strMethod == "listreceivedbylabel"    && n > 0) ConvertTo<boost::int64_t>(params[0]);
         if (strMethod == "listreceivedbylabel"    && n > 1) ConvertTo<bool>(params[1]);
-        if (strMethod == "getblock"               && n > 0) ConvertTo<boost::int64_t>(params[0]);
+	if (strMethod == "getblock"               && n > 0) ConvertTo<boost::int64_t>(params[0]);
 
         // Execute
         Object reply = CallRPC(strMethod, params);
